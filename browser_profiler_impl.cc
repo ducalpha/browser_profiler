@@ -13,7 +13,6 @@
 #include "browser_profiler_impl_switches.h"
 #include "power_tool_controller.h"
 #include "base/command_line.h"
-#include "base/cpu_info.h"
 #include "base/logging.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -28,6 +27,7 @@
 #include "base/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/third_party/android_cpu_tools/src/cpu_configurer/cpu_configurer_switches.h"
+#include "base/third_party/android_cpu_tools/src/cpu_info/cpu_info.h"
 #include "base/third_party/android_cpu_tools/src/workload_generator/workload_generator.h"
 #include "base/time/time.h"
 
@@ -646,7 +646,7 @@ void BrowserProfilerImpl::StopPowerSampling() {
   // on max core id (typically a big core)
   // Run a 0.9 sec workload Exynos 5422
   android_cpu_tools::WorkloadGenerator::RunWorkload(
-      std::vector<size_t>(1, base::CpuInfo::MaxCoreId()),
+      std::vector<size_t>(1, android_cpu_tools::CommandLineCpuInfo::MaxCoreId()),
       10000);
 
   std::ostringstream sync_workload_end_time;
@@ -739,27 +739,27 @@ void BrowserProfilerImpl::StartChromeTracing() {
 
 void BrowserProfilerImpl::InitializeCpuSetupCommands() {
   std::string num_cores =
-      base::IntToString(base::CpuInfo::MaxCoreId() - base::CpuInfo::MinCoreId() + 1);
+      base::IntToString(android_cpu_tools::CommandLineCpuInfo::MaxCoreId() - android_cpu_tools::CommandLineCpuInfo::MinCoreId() + 1);
 
   default_cpu_setup_command_.AppendSwitchASCII(
-      switches::kAutoHotplugType, base::CpuInfo::AutoHotplug());
+      switches::kAutoHotplugType, android_cpu_tools::CommandLineCpuInfo::AutoHotplug());
   default_cpu_setup_command_.AppendSwitchASCII(
       switches::kSetAutoHotplug, switches::kOn);
   default_cpu_setup_command_.AppendSwitchASCII(
       switches::kSetNumOnlineCores, num_cores);
   default_cpu_setup_command_.AppendSwitchASCII(
-      switches::kSetGovernor, base::CpuInfo::FirstFreqGovernor());
+      switches::kSetGovernor, android_cpu_tools::CommandLineCpuInfo::FirstFreqGovernor());
   default_cpu_setup_command_.AppendSwitchASCII(
-      switches::kMinFreq, base::UintToString(base::CpuInfo::MinFreq()));
+      switches::kMinFreq, base::UintToString(android_cpu_tools::CommandLineCpuInfo::MinFreq()));
   default_cpu_setup_command_.AppendSwitchASCII(
-      switches::kMaxFreq, base::UintToString(base::CpuInfo::MaxFreq()));
+      switches::kMaxFreq, base::UintToString(android_cpu_tools::CommandLineCpuInfo::MaxFreq()));
 
   VLOG(1) << "Default cpu setup command: "
       << default_cpu_setup_command_.GetCommandLineString();
 
   // Turn on all cores and put them at max freq
   sync_workload_cpu_setup_command_.AppendSwitchASCII(
-      switches::kAutoHotplugType, base::CpuInfo::AutoHotplug());
+      switches::kAutoHotplugType, android_cpu_tools::CommandLineCpuInfo::AutoHotplug());
   sync_workload_cpu_setup_command_.AppendSwitchASCII(
       switches::kSetAutoHotplug, switches::kOff);
   sync_workload_cpu_setup_command_.AppendSwitchASCII(
@@ -767,7 +767,7 @@ void BrowserProfilerImpl::InitializeCpuSetupCommands() {
   sync_workload_cpu_setup_command_.AppendSwitchASCII(
       switches::kSetGovernor, "performance");
   sync_workload_cpu_setup_command_.AppendSwitchASCII(
-      switches::kMaxFreq, base::UintToString(base::CpuInfo::MaxFreq()));
+      switches::kMaxFreq, base::UintToString(android_cpu_tools::CommandLineCpuInfo::MaxFreq()));
 
   VLOG(1) << "Sync workload cpu setup command: "
       << default_cpu_setup_command_.GetCommandLineString();
