@@ -404,7 +404,10 @@ void BrowserProfilerImpl::PostProcessInternal() {
   experiment_result_.WriteToFile(constants_.kExperimentResultFile, first_experiment);
 
   StopTracers();
+}
 
+
+void BrowserProfilerImpl::PostProcessInternalSecondHalf() {
   // Update experiment index only when experiment is successful
   UpdateExperimentIndexAndCommandLine();
 
@@ -444,7 +447,8 @@ void BrowserProfilerImpl::StartTracers() {
 void BrowserProfilerImpl::StopTracers() {
 #if defined(CHROMIUM_BUILD)
   if (setting_->do_chrome_trace && chrome_tracing_started_) {
-    LOG(INFO) << "stop ChromeTracing";
+    VLOG(0) << "Stop ChromeTracing";
+
     base::FilePath output_file(
         constants_.kBpOutDir.Append(experiment_id_).value() + "." + constants_.kChromeTraceBaseName);
 
@@ -487,6 +491,8 @@ void BrowserProfilerImpl::StopTracersSecondHalf() {
 
   if (setting_->capture_packets)
     StopCapturePackets();
+
+  PostProcessInternalSecondHalf();
 }
 
 void BrowserProfilerImpl::RestartBrowser() {
@@ -727,7 +733,7 @@ std::string BrowserProfilerImpl::BrowserCommandLine() {
 
 void BrowserProfilerImpl::StartChromeTracing() {
 #if defined(CHROMIUM_BUILD)
-  LOG(INFO) << "Start Chrome Tracing";
+  VLOG(0) << "Start Chrome Tracing";
   if (!chrome_tracing_controller_.StartTracing(this, setting_->tracing_categories,
         "record-as-much-as-possible")) {
     LOG(ERROR) << "Failed to start ChromeTracing";

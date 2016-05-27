@@ -74,6 +74,7 @@ class BrowserProfilerImpl : public BrowserProfiler {
 
  private:
   void PostProcessInternal();
+  void PostProcessInternalSecondHalf();
   void StartTracers();
   void StopTracers();
   void StopTracersSecondHalf();
