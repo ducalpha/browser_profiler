@@ -44,11 +44,7 @@ const char* ExperimentResult::kResultLineFields[] = {
   kUserThinkTimeKey 
 };
 
-// Default values: empty
 ExperimentResult::ExperimentResult() {
-  for (size_t i = 0; i < arraysize(kResultLineFields); ++i) {
-    key_value_map_[kResultLineFields[i]] = "";
-  }
 }
 
 std::string ExperimentResult::LogHeaderLine() {
@@ -56,8 +52,12 @@ std::string ExperimentResult::LogHeaderLine() {
   std::string header_line;
 
   for (size_t i = 0; i < arraysize(kResultLineFields); ++i) {
+    if (key_value_map_.find(kResultLineFields[i]) == key_value_map_.end())
+      continue;
+
     if (i > 0)
       header_line += '\t';
+
     header_line += kResultLineFields[i];
   }
 
@@ -72,6 +72,9 @@ std::string ExperimentResult::LogLine() {
   std::string log_line;
 
   for (size_t i = 0; i < arraysize(kResultLineFields); ++i) {
+    if (key_value_map_.find(kResultLineFields[i]) == key_value_map_.end())
+      continue;
+
     if (i > 0)
       log_line += '\t';
     log_line += key_value_map_[kResultLineFields[i]];
