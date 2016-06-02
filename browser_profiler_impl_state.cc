@@ -53,7 +53,8 @@ bool ReadExperimentUrlList(const base::FilePath& url_list_file,
   url_list->clear();
   for (size_t i = 0; i < list.size(); ++i) {
     std::string url = list[i];
-    if (!url.empty()) {
+    // Skip url starting with #
+    if (!url.empty() && !StartsWithASCII(url, "#", true)) {
       VLOG(1) << "Read url: " << url;
 
       // Add http by default, if the url is just a host name
