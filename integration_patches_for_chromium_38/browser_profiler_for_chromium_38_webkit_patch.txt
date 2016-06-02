@@ -1,0 +1,188 @@
+diff --git a/Source/core/frame/LocalDOMWindow.cpp b/Source/core/frame/LocalDOMWindow.cpp
+index 913ae18..93751e7 100644
+--- a/Source/core/frame/LocalDOMWindow.cpp
++++ b/Source/core/frame/LocalDOMWindow.cpp
+@@ -99,6 +99,7 @@
+ #include "platform/PlatformScreen.h"
+ #include "platform/RuntimeEnabledFeatures.h"
+ #include "platform/UserGestureIndicator.h"
++#include "platform/EventTracer.h"
+ #include "platform/geometry/FloatRect.h"
+ #include "platform/graphics/media/MediaPlayer.h"
+ #include "platform/weborigin/KURL.h"
+@@ -1574,6 +1575,10 @@ void LocalDOMWindow::dispatchLoadEvent()
+         timing->markLoadEventStart();
+         dispatchEvent(loadEvent, document());
+         timing->markLoadEventEnd();
++#if defined(MARK_FTRACE)  // ducalpha
++        if (m_frame == m_frame->page()->mainFrame())
++          EventTracer::AddSyncMetadataEvent("Blink: LoadEventEndInMainFrame");
++#endif
+     } else
+         dispatchEvent(loadEvent, document());
+ 
+diff --git a/Source/core/loader/DocumentLoadTiming.cpp b/Source/core/loader/DocumentLoadTiming.cpp
+index 47baefd..ead494c 100644
+--- a/Source/core/loader/DocumentLoadTiming.cpp
++++ b/Source/core/loader/DocumentLoadTiming.cpp
+@@ -27,6 +27,7 @@
+ #include "core/loader/DocumentLoadTiming.h"
+ 
+ #include "platform/weborigin/SecurityOrigin.h"
++#include "platform/EventTracer.h" // ducalpha: not need macros in TraceEvent.h
+ #include "wtf/RefPtr.h"
+ 
+ namespace blink {
+@@ -69,6 +70,10 @@ void DocumentLoadTiming::markNavigationStart()
+ 
+     m_navigationStart = m_referenceMonotonicTime = monotonicallyIncreasingTime();
+     m_referenceWallTime = currentTime();
++
++#if defined(MARK_FTRACE) // ducalpha
++    EventTracer::AddSyncMetadataEvent("Blink: markNavigationStart");
++#endif
+ }
+ 
+ void DocumentLoadTiming::setNavigationStart(double navigationStart)
+diff --git a/Source/core/timing/PerformanceTiming.cpp b/Source/core/timing/PerformanceTiming.cpp
+index 64637d5..2f05c95 100644
+--- a/Source/core/timing/PerformanceTiming.cpp
++++ b/Source/core/timing/PerformanceTiming.cpp
+@@ -87,6 +87,25 @@ unsigned long long PerformanceTiming::unloadEventEnd() const
+     return monotonicTimeToIntegerMilliseconds(timing->unloadEventEnd());
+ }
+ 
++// ducalpha
++double PerformanceTiming::monotonicNavigationStart() const
++{
++    DocumentLoadTiming* timing = documentLoadTiming();
++    if (!timing)
++        return 0;
++
++    return timing->navigationStart();
++}
++
++double PerformanceTiming::monotonicLoadEventEnd() const
++{
++    DocumentLoadTiming* timing = documentLoadTiming();
++    if (!timing)
++        return 0;
++
++    return timing->loadEventEnd();
++}
++
+ unsigned long long PerformanceTiming::redirectStart() const
+ {
+     DocumentLoadTiming* timing = documentLoadTiming();
+diff --git a/Source/core/timing/PerformanceTiming.h b/Source/core/timing/PerformanceTiming.h
+index ef5b9dc..0d54fca 100644
+--- a/Source/core/timing/PerformanceTiming.h
++++ b/Source/core/timing/PerformanceTiming.h
+@@ -73,6 +73,9 @@ public:
+     unsigned long long domComplete() const;
+     unsigned long long loadEventStart() const;
+     unsigned long long loadEventEnd() const;
++    // ducalpha: get the timestamps in monotonic time
++    double monotonicNavigationStart() const;
++    double monotonicLoadEventEnd() const;
+ 
+     void trace(Visitor*) { }
+ 
+diff --git a/Source/platform/EventTracer.cpp b/Source/platform/EventTracer.cpp
+index 594803a..a660c1c 100644
+--- a/Source/platform/EventTracer.cpp
++++ b/Source/platform/EventTracer.cpp
+@@ -34,10 +34,16 @@
+ #include "public/platform/Platform.h"
+ #include "public/platform/WebConvertableToTraceFormat.h"
+ #include "wtf/Assertions.h"
++#include <fcntl.h> // ducalpha: flags for open
+ #include <stdio.h>
+ 
+ namespace blink {
+ 
++// ducalpha: copied from Chromium's
++namespace {
++const char* kATraceMarkerFile = "/sys/kernel/debug/tracing/trace_marker";
++}
++
+ COMPILE_ASSERT(sizeof(blink::Platform::TraceEventHandle) == sizeof(TraceEvent::TraceEventHandle), TraceEventHandle_types_must_be_compatible);
+ 
+ // The dummy variable is needed to avoid a crash when someone updates the state variables
+@@ -104,4 +110,18 @@ void EventTracer::updateTraceEventDuration(const unsigned char* categoryEnabledF
+     blink::Platform::current()->updateTraceEventDuration(categoryEnabledFlag, name, handle);
+ }
+ 
++// ducalpha: copied from Chromium's
++void EventTracer::AddSyncMetadataEvent(const char* event_name) {
++  int traceMarkerFd = open(kATraceMarkerFile, O_WRONLY | O_APPEND);
++  if (traceMarkerFd == -1) {
++    //PLOG(WARNING) << "Couldn't open " << kATraceMarkerFile;
++    return;
++  }
++
++  if (write(traceMarkerFd, event_name, strlen(event_name)) == -1) {
++    //PLOG(WARNING) << "Couldn't write to " << kATraceMarkerFile;
++  }
++  close(traceMarkerFd);
++}
++
+ } // namespace blink
+diff --git a/Source/platform/EventTracer.h b/Source/platform/EventTracer.h
+index 81a7936..19de5e1 100644
+--- a/Source/platform/EventTracer.h
++++ b/Source/platform/EventTracer.h
+@@ -38,6 +38,8 @@
+ 
+ #include <stdint.h>
+ 
++#define MARK_FTRACE // ducalpha: enable or disable the ftrace marking
++
+ // This will mark the trace event as disabled by default. The user will need
+ // to explicitly enable the event.
+ #define TRACE_DISABLED_BY_DEFAULT(name) "disabled-by-default-" name
+@@ -82,6 +84,8 @@ public:
+         const unsigned long long argValues[],
+         unsigned char flags);
+     static void updateTraceEventDuration(const unsigned char* categoryEnabledFlag, const char* name, TraceEvent::TraceEventHandle);
++    // ducalpha: this is copied from chromium's
++    static void AddSyncMetadataEvent(const char* event_name);
+ };
+ 
+ } // namespace blink
+diff --git a/Source/web/WebPerformance.cpp b/Source/web/WebPerformance.cpp
+index 4ac6997..2571831 100644
+--- a/Source/web/WebPerformance.cpp
++++ b/Source/web/WebPerformance.cpp
+@@ -166,6 +166,17 @@ double WebPerformance::loadEventEnd() const
+     return millisecondsToSeconds(m_private->timing()->loadEventEnd());
+ }
+ 
++// ducalpha
++double WebPerformance::monotonicNavigationStart() const
++{
++    return m_private->timing()->monotonicNavigationStart();
++}
++
++double WebPerformance::monotonicLoadEventEnd() const
++{
++    return m_private->timing()->monotonicLoadEventEnd();
++}
++
+ WebPerformance::WebPerformance(const PassRefPtrWillBeRawPtr<Performance>& performance)
+     : m_private(performance)
+ {
+diff --git a/public/web/WebPerformance.h b/public/web/WebPerformance.h
+index 6fd8c5b..64738c8 100644
+--- a/public/web/WebPerformance.h
++++ b/public/web/WebPerformance.h
+@@ -84,6 +84,9 @@ public:
+     BLINK_EXPORT double domComplete() const;
+     BLINK_EXPORT double loadEventStart() const;
+     BLINK_EXPORT double loadEventEnd() const;
++    // ducalpha
++    BLINK_EXPORT double monotonicNavigationStart() const;
++    BLINK_EXPORT double monotonicLoadEventEnd() const;
+ 
+ #if BLINK_IMPLEMENTATION
+     WebPerformance(const PassRefPtrWillBeRawPtr<Performance>&);
