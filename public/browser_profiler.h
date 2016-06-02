@@ -1,5 +1,5 @@
 // Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-// Licensed under MIT ($LICENSE_URL)
+// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 
 #ifndef BROWSER_PROFILER_PUBLIC_BROWSER_PROFILER_H_
 #define BROWSER_PROFILER_PUBLIC_BROWSER_PROFILER_H_
