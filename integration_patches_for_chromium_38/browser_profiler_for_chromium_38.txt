@@ -1,0 +1,1057 @@
+diff --git a/base/android/base_jni_registrar.cc b/base/android/base_jni_registrar.cc
+index b6d8a28..ac7a3e1 100644
+--- a/base/android/base_jni_registrar.cc
++++ b/base/android/base_jni_registrar.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "base/android/application_status_listener.h"
+ #include "base/android/build_info.h"
++#include "base/android/browser_profiler_manager.h"
+ #include "base/android/command_line_android.h"
+ #include "base/android/content_uri_utils.h"
+ #include "base/android/cpu_features.h"
+@@ -34,6 +35,7 @@ static RegistrationMethod kBaseRegisteredMethods[] = {
+   { "ApplicationStatusListener",
+       base::android::ApplicationStatusListener::RegisterBindings },
+   { "BuildInfo", base::android::BuildInfo::RegisterBindings },
++  { "BrowserProfilerManager", base::android::RegisterBrowserProfilerManager },
+   { "CommandLine", base::android::RegisterCommandLine },
+   { "ContentUriUtils", base::RegisterContentUriUtils },
+   { "CpuFeatures", base::android::RegisterCpuFeatures },
+diff --git a/base/android/browser_profiler_manager.cc b/base/android/browser_profiler_manager.cc
+new file mode 100644
+index 0000000..f6dbf9a
+--- /dev/null
++++ b/base/android/browser_profiler_manager.cc
+@@ -0,0 +1,142 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($LICENSE_URL)
++
++#include "base/android/browser_profiler_manager.h"
++
++#include <jni.h>
++
++#include "base/android/jni_string.h"
++#include "base/android/scoped_java_ref.h"
++#include "base/third_party/browser_profiler/browser_profiler_impl.h"
++#include "base/third_party/browser_profiler/browser_profiler_impl_switches.h"
++#include "base/bind.h"
++#include "base/command_line.h"
++#include "base/lazy_instance.h"
++#include "base/memory/singleton.h"
++#include "base/message_loop/message_loop.h"
++#include "base/time/time.h"
++#include "jni/BrowserProfilerManager_jni.h"
++
++namespace {
++
++// ducalpha: use a global state instead of bound native/Java object
++// because we use Singleton BrowserProfiler
++// Advantage: simple implementation (access through this file and GetInstance())
++// Disavantage: unbounded life cycle between native and Java object
++struct GlobalState {
++  GlobalState() {}
++  base::android::ScopedJavaGlobalRef<jobject> j_browser_profiler_manager;
++};
++
++base::LazyInstance<GlobalState> g_global_state = LAZY_INSTANCE_INITIALIZER;
++
++}  // namespace
++
++
++namespace base {
++
++namespace android {
++
++static void Init(JNIEnv* env, jclass clazz, jobject obj, jstring browserCommandLineFile,
++    jstring cpuInfoCommandLineFile) {
++  g_global_state.Get().j_browser_profiler_manager.Reset(
++      base::android::ScopedJavaLocalRef<jobject>(env, obj));
++
++  BrowserProfilerManager::GetInstance()->Initialize(
++      base::FilePath(ConvertJavaStringToUTF8(env, browserCommandLineFile)),
++      base::FilePath(ConvertJavaStringToUTF8(env, cpuInfoCommandLineFile)));
++}
++
++// static
++BrowserProfilerManager* BrowserProfilerManager::GetInstance() {
++  return Singleton<BrowserProfilerManager>::get();
++}
++
++BrowserProfilerManager::BrowserProfilerManager()
++  : delayed_task_callback_(NULL),
++    weak_factory_(this) {
++  if (!CommandLine::ForCurrentProcess()->HasSwitch(switches::kDisableBrowserProfiler)) {
++    browser_profiler_.reset(new browser_profiler::BrowserProfilerImpl(this));
++  }
++}
++
++void BrowserProfilerManager::Initialize(const base::FilePath& browser_command_line_file,
++    const base::FilePath& cpu_info_command_line_file) {
++  if (browser_profiler_) {
++    browser_profiler_->Initialize(browser_command_line_file, cpu_info_command_line_file);
++  }
++}
++
++bool BrowserProfilerManager::Prepare(std::string *experiment_url) {
++  if (browser_profiler_) {
++    return browser_profiler_->Prepare(experiment_url);
++  }
++
++  return false;
++}
++
++bool BrowserProfilerManager::PostProcess(const std::string& url,
++      double navigation_start_monotonic_time, double load_event_end_monotonic_time) {
++  if (browser_profiler_) {
++    return browser_profiler_->PostProcess(url, navigation_start_monotonic_time,
++        load_event_end_monotonic_time);
++  }
++  return false;
++}
++
++void BrowserProfilerManager::ClearCacheIfNeeded(const base::FilePath& cache_path) {
++  if (!browser_profiler_)
++    return;
++  browser_profiler_->ClearCacheIfNeeded(cache_path);
++}
++
++void BrowserProfilerManager::RestartBrowser() {
++  JNIEnv* env = base::android::AttachCurrentThread();
++  jobject j_browser_profiler_manager = g_global_state.Get().j_browser_profiler_manager.obj();
++  Java_BrowserProfilerManager_restartBrowser(env, j_browser_profiler_manager);
++}
++
++void BrowserProfilerManager::FinishAllExperiments() {
++  JNIEnv* env = base::android::AttachCurrentThread();
++  jobject j_browser_profiler_manager = g_global_state.Get().j_browser_profiler_manager.obj();
++  Java_BrowserProfilerManager_finishAllExperiments(env, j_browser_profiler_manager);
++}
++
++// Simple implementation by calling Android Handler
++// Allow only 1 delayed task callback to register
++// TODO: implement better callback by using base::Callback
++void BrowserProfilerManager::DoDelayedTask(DelayedTaskCallback delayed_task_callback,
++    long delay_millis) {
++  if (delayed_task_callback_ != NULL) {
++    LOG(ERROR) << "Another delayed task callback is queued";
++    return;
++  }
++
++  delayed_task_callback_ = delayed_task_callback; 
++
++  MessageLoop::current()->PostDelayedTask(
++      FROM_HERE,
++      base::Bind(&BrowserProfilerManager::DoDelayedTaskCallback, weak_factory_.GetWeakPtr()),
++      TimeDelta::FromMilliseconds(delay_millis));    
++}
++
++void BrowserProfilerManager::CloseActiveShell() {
++  JNIEnv* env = base::android::AttachCurrentThread();
++  jobject j_browser_profiler_manager = g_global_state.Get().j_browser_profiler_manager.obj();
++  Java_BrowserProfilerManager_closeActiveShell(env, j_browser_profiler_manager);
++}
++
++void BrowserProfilerManager::DoDelayedTaskCallback() {
++  if (delayed_task_callback_ != NULL) {
++    ((*browser_profiler_).*delayed_task_callback_)();
++    delayed_task_callback_ = NULL;
++  }
++}
++
++// Register native methods
++bool RegisterBrowserProfilerManager(JNIEnv* env) {
++  return RegisterNativesImpl(env);
++}
++
++} // namespace android
++} // namespace base
+diff --git a/base/android/browser_profiler_manager.h b/base/android/browser_profiler_manager.h
+new file mode 100644
+index 0000000..b4d0018
+--- /dev/null
++++ b/base/android/browser_profiler_manager.h
+@@ -0,0 +1,77 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($LICENSE_URL)
++
++#ifndef CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
++#define CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
++
++#include <jni.h>
++
++#include "base/third_party/browser_profiler/public/browser_profiler.h"
++
++#if defined(COMPILER_GCC) && __cplusplus >= 201103L && \
++    (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40900
++#include <memory>
++#else
++#include "base/memory/scoped_ptr.h"
++#endif
++
++#include "base/android/scoped_java_ref.h"
++#include "base/base_export.h"
++#include "base/files/file_path.h"
++#include "base/macros.h"
++#include "base/memory/weak_ptr.h"
++
++namespace base {
++namespace android {
++
++// Registers BrowserProfilerManager native methods
++bool RegisterBrowserProfilerManager(JNIEnv* env);
++
++class BASE_EXPORT BrowserProfilerManager : public browser_profiler::BrowserProfilerClient {
++ public:
++  // Get the singleton
++  static BrowserProfilerManager* GetInstance();
++
++  BrowserProfilerManager();
++
++  void Initialize(const base::FilePath& browser_command_line_file,
++    const base::FilePath& cpu_info_command_line_file);
++
++  // Prepare experiment
++  // Output the url to do the experiment
++  // Return true if do experiment, false if do not prepare
++  bool Prepare(std::string* experiment_url);
++
++  bool PostProcess(const std::string& url,
++      double navigation_start_monotonic_time, double load_event_end_monotonic_time);
++
++  void ClearCacheIfNeeded(const base::FilePath& cache_path);
++
++  // Profiler Client Implementation
++  virtual void DoDelayedTask(DelayedTaskCallback delay_task_callback, long delay_millis) OVERRIDE;
++
++  virtual void RestartBrowser() OVERRIDE;
++
++  virtual void FinishAllExperiments() OVERRIDE;
++
++  virtual void CloseActiveShell() OVERRIDE;
++
++  void DoDelayedTaskCallback();
++ private:
++  DelayedTaskCallback delayed_task_callback_;
++
++#if defined(COMPILER_GCC) && __cplusplus >= 201103L && \
++    (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40900
++  std::unique_ptr<browser_profiler::BrowserProfiler> browser_profiler_;
++#else
++  scoped_ptr<browser_profiler::BrowserProfiler> browser_profiler_;
++#endif
++
++  WeakPtrFactory<BrowserProfilerManager> weak_factory_;
++
++  DISALLOW_COPY_AND_ASSIGN(BrowserProfilerManager);
++};
++
++} // namespace android
++} // namespace base
++#endif // CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
+diff --git a/base/android/java/src/org/chromium/base/BrowserProfilerManager.java b/base/android/java/src/org/chromium/base/BrowserProfilerManager.java
+new file mode 100644
+index 0000000..e64388e
+--- /dev/null
++++ b/base/android/java/src/org/chromium/base/BrowserProfilerManager.java
+@@ -0,0 +1,47 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($LICENSE_URL)
++package org.chromium.base;
++
++import android.content.Context;
++import android.content.Intent;
++
++import org.chromium.base.CalledByNative;
++
++@JNINamespace("base::android")
++public class BrowserProfilerManager {
++    public static String DISABLE_BROWSER_PROFILER = "disable-browser-profiler";
++
++    public interface BrowserShellController {
++        public void closeActiveShell();
++    }
++
++    public BrowserProfilerManager(Context context, BrowserShellController browserShellController,
++            String browserCommandLineFile, String cpuInfoCommandLineFile) {
++        mContext = context;
++        mBrowserShellController = browserShellController;
++        nativeInit(this, browserCommandLineFile, cpuInfoCommandLineFile);
++    }
++
++    private Context mContext;
++    private BrowserShellController mBrowserShellController;
++
++    @CalledByNative
++    private void restartBrowser() {
++        mContext.sendBroadcast(
++                new Intent("com.cps.browsermonitor.RESTART_CONTENT_SHELL"));
++    }
++
++    @CalledByNative
++    private void finishAllExperiments() {
++        mContext.sendBroadcast(
++                new Intent("com.cps.browsermonitor.FINISH_ALL_EXPERIMENTS"));
++    }
++
++    @CalledByNative
++    private void closeActiveShell() {
++        mBrowserShellController.closeActiveShell();
++    }
++
++    private static native void nativeInit(Object browserProfilerInstance,
++            String browserCommandLineFile, String cpuInfoCommandLineFile);
++}
+diff --git a/base/android/java/src/org/chromium/base/CommandLine.java b/base/android/java/src/org/chromium/base/CommandLine.java
+index 861c008..b2a72b9 100644
+--- a/base/android/java/src/org/chromium/base/CommandLine.java
++++ b/base/android/java/src/org/chromium/base/CommandLine.java
+@@ -245,6 +245,16 @@ public abstract class CommandLine {
+         }
+     }
+ 
++    // ducalpha
++    /**
++     * @param fileName the file to read in.
++     * @return the tokenized arguments, suitable for passing AppendSwitchesAndArguments.
++     */
++    public static String[] readSwitchesAndArgumentsFromFile(String fileName) {
++        char[] buffer = readUtf8FileFully(fileName, 8 * 1024);
++        return buffer == null ? null : tokenizeQuotedAruments(buffer);
++    }
++
+     private CommandLine() {}
+ 
+     private static class JavaCommandLine extends CommandLine {
+diff --git a/base/base.gyp b/base/base.gyp
+index d3c397c..102ef1f 100644
+--- a/base/base.gyp
++++ b/base/base.gyp
+@@ -26,6 +26,9 @@
+         '../testing/gtest.gyp:gtest_prod',
+         '../third_party/modp_b64/modp_b64.gyp:modp_b64',
+         'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
++        'third_party/android_cpu_tools/android_cpu_tools.gyp:cpu_info', # ducalpha
++        'third_party/android_cpu_tools/android_cpu_tools.gyp:workload_generator', # ducalpha
++        'third_party/browser_profiler/browser_profiler.gyp:browser_profiler', # ducalpha
+       ],
+       # TODO(gregoryd): direct_dependent_settings should be shared with the
+       #  64-bit target, but it doesn't work due to a bug in gyp
+@@ -1275,6 +1278,7 @@
+           'type': 'none',
+           'sources': [
+             'android/java/src/org/chromium/base/ApplicationStatus.java',
++            'android/java/src/org/chromium/base/BrowserProfilerManager.java',
+             'android/java/src/org/chromium/base/BuildInfo.java',
+             'android/java/src/org/chromium/base/CommandLine.java',
+             'android/java/src/org/chromium/base/ContentUriUtils.java',
+diff --git a/base/base.gypi b/base/base.gypi
+index cfa9d61..98b1bc9 100644
+--- a/base/base.gypi
++++ b/base/base.gypi
+@@ -30,6 +30,8 @@
+           'android/application_status_listener.h',
+           'android/base_jni_registrar.cc',
+           'android/base_jni_registrar.h',
++          'android/browser_profiler_manager.cc',
++          'android/browser_profiler_manager.h',
+           'android/build_info.cc',
+           'android/build_info.h',
+           'android/command_line_android.cc',
+diff --git a/base/debug/trace_event_android.cc b/base/debug/trace_event_android.cc
+index 1e78b45..2759dde 100644
+--- a/base/debug/trace_event_android.cc
++++ b/base/debug/trace_event_android.cc
+@@ -195,5 +195,19 @@ void TraceLog::AddClockSyncMetadataEvent() {
+   close(atrace_fd);
+ }
+ 
++// ducalpha: Marking a custom events on Ftrace
++void TraceLog::AddSyncMetadataEvent(const char* event_name) {
++  int atrace_fd = open(kATraceMarkerFile, O_WRONLY | O_APPEND);
++  if (atrace_fd == -1) {
++    PLOG(WARNING) << "Couldn't open " << kATraceMarkerFile;
++    return;
++  }
++
++  if (write(atrace_fd, event_name, strlen(event_name)) == -1) {
++    PLOG(WARNING) << "Couldn't write to " << kATraceMarkerFile;
++  }
++  close(atrace_fd);
++}
++
+ }  // namespace debug
+ }  // namespace base
+diff --git a/base/debug/trace_event_impl.h b/base/debug/trace_event_impl.h
+index 4cbb721..10f085e 100644
+--- a/base/debug/trace_event_impl.h
++++ b/base/debug/trace_event_impl.h
+@@ -488,6 +488,7 @@ class BASE_EXPORT TraceLog {
+   void StartATrace();
+   void StopATrace();
+   void AddClockSyncMetadataEvent();
++  void AddSyncMetadataEvent(const char* event_name); // ducalpha
+ #endif
+ 
+   // Enabled state listeners give a callback when tracing is enabled or
+diff --git a/content/browser/frame_host/render_frame_host_delegate.h b/content/browser/frame_host/render_frame_host_delegate.h
+index 40af1db..0f295c2 100644
+--- a/content/browser/frame_host/render_frame_host_delegate.h
++++ b/content/browser/frame_host/render_frame_host_delegate.h
+@@ -10,6 +10,7 @@
+ #include "base/basictypes.h"
+ #include "base/i18n/rtl.h"
+ #include "content/common/content_export.h"
++#include "content/common/experiment_result.h"
+ #include "content/common/frame_message_enums.h"
+ #include "content/public/common/javascript_message_type.h"
+ #include "content/public/common/media_stream_request.h"
+@@ -105,7 +106,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
+ 
+   // The onload handler in the frame has completed. Only called for the top-
+   // level frame.
+-  virtual void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host) {}
++  virtual void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host,
++                const ExperimentResult& experiment_result) {} // ducalpha
+ 
+   // The page's title was changed and should be updated. Only called for the
+   // top-level frame.
+diff --git a/content/browser/frame_host/render_frame_host_impl.cc b/content/browser/frame_host/render_frame_host_impl.cc
+index 832911c..7e2017b 100644
+--- a/content/browser/frame_host/render_frame_host_impl.cc
++++ b/content/browser/frame_host/render_frame_host_impl.cc
+@@ -525,10 +525,17 @@ void RenderFrameHostImpl::OnOpenURL(
+       params.should_replace_current_entry, params.user_gesture);
+ }
+ 
+-void RenderFrameHostImpl::OnDocumentOnLoadCompleted() {
++// ducalpha
++void RenderFrameHostImpl::OnDocumentOnLoadCompleted(
++    const FrameHostMsg_DocumentOnLoadCompleted_Params& params) {
+   // This message is only sent for top-level frames. TODO(avi): when frame tree
+   // mirroring works correctly, add a check here to enforce it.
+-  delegate_->DocumentOnLoadCompleted(this);
++  ExperimentResult experiment_result;
++  experiment_result.url = params.url;
++  experiment_result.navigation_start_monotonic_time = params.navigation_start_monotonic_time;
++  experiment_result.load_event_end_monotonic_time = params.load_event_end_monotonic_time;
++
++  delegate_->DocumentOnLoadCompleted(this, experiment_result);
+ }
+ 
+ void RenderFrameHostImpl::OnDidStartProvisionalLoadForFrame(
+diff --git a/content/browser/frame_host/render_frame_host_impl.h b/content/browser/frame_host/render_frame_host_impl.h
+index de6a58e..c9291dd 100644
+--- a/content/browser/frame_host/render_frame_host_impl.h
++++ b/content/browser/frame_host/render_frame_host_impl.h
+@@ -32,6 +32,7 @@ struct FrameHostMsg_DidFailProvisionalLoadWithError_Params;
+ struct FrameHostMsg_OpenURL_Params;
+ struct FrameHostMsg_BeginNavigation_Params;
+ struct FrameMsg_Navigate_Params;
++struct FrameHostMsg_DocumentOnLoadCompleted_Params;
+ 
+ namespace base {
+ class FilePath;
+@@ -303,7 +304,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
+   void OnDetach();
+   void OnFrameFocused();
+   void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
+-  void OnDocumentOnLoadCompleted();
++  void OnDocumentOnLoadCompleted(const FrameHostMsg_DocumentOnLoadCompleted_Params& params);
+   void OnDidStartProvisionalLoadForFrame(const GURL& url,
+                                          bool is_transition_navigation);
+   void OnDidFailProvisionalLoadWithError(
+diff --git a/content/browser/tracing/tracing_controller_browser_profiler_impl.cc b/content/browser/tracing/tracing_controller_browser_profiler_impl.cc
+new file mode 100644
+index 0000000..0a5fc85
+--- /dev/null
++++ b/content/browser/tracing/tracing_controller_browser_profiler_impl.cc
+@@ -0,0 +1,65 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($LICENSE_URL)
++
++#include "content/browser/tracing/tracing_controller_browser_profiler_impl.h"
++
++#include "base/bind.h"
++#include "base/third_party/browser_profiler/browser_profiler_impl.h"
++#include "base/debug/trace_event_impl.h"
++#include "base/logging.h"
++#include "content/public/browser/tracing_controller.h"
++
++namespace content {
++
++TracingControllerBrowserProfilerImpl::TracingControllerBrowserProfilerImpl()
++  : browser_profiler_impl_(NULL),
++    weak_factory_(this) {
++}
++
++bool TracingControllerBrowserProfilerImpl::StartTracing(
++    browser_profiler::BrowserProfilerImpl *browser_profiler_impl,
++    const std::string& categories, 
++      const std::string& trace_options_str) {
++  if (browser_profiler_impl_ != NULL) {
++    LOG(ERROR) << "Another browser profiler already started tracing";
++    return false;
++  }
++
++  browser_profiler_impl_ = browser_profiler_impl;
++
++  base::debug::TraceOptions trace_options;
++  trace_options.SetFromString(trace_options_str);
++
++  return TracingController::GetInstance()->EnableRecording(
++          base::debug::CategoryFilter(categories),
++          trace_options,
++          TracingController::EnableRecordingDoneCallback());
++}
++
++void TracingControllerBrowserProfilerImpl::StopTracing(const base::FilePath& chrome_trace_file) {
++  VLOG(0) << "Stop tracing, trace file: " << chrome_trace_file.value();
++
++  if (!TracingController::GetInstance()->DisableRecording(
++        chrome_trace_file,
++        base::Bind(&TracingControllerBrowserProfilerImpl::OnTracingStopped,
++          weak_factory_.GetWeakPtr()))) {
++    LOG(ERROR) << "Stop tracing async failed, forcing an immediate stop";
++    OnTracingStopped(chrome_trace_file);
++  }
++}
++
++void TracingControllerBrowserProfilerImpl::OnTracingStopped(
++      const base::FilePath& file_path) {
++  VLOG(0) << "Chrome tracing written in " << file_path.value();
++
++  if (browser_profiler_impl_ == NULL) {
++    LOG(ERROR) << "No browser profiler to callback";
++    return;
++  }
++
++  browser_profiler_impl_->OnChromeTracingStopped();
++  browser_profiler_impl_ = NULL;
++}
++
++
++}  // namespace content
+diff --git a/content/browser/tracing/tracing_controller_browser_profiler_impl.h b/content/browser/tracing/tracing_controller_browser_profiler_impl.h
+new file mode 100644
+index 0000000..139b0e0
+--- /dev/null
++++ b/content/browser/tracing/tracing_controller_browser_profiler_impl.h
+@@ -0,0 +1,45 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($LICENSE_URL)
++
++#ifndef CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_BROWSER_PROFILER_IMPL_H_
++#define CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_BROWSER_PROFILER_IMPL_H_
++
++#include <string>
++
++#include "base/files/file_path.h"
++#include "base/memory/weak_ptr.h"
++#include "content/common/content_export.h"
++
++namespace browser_profiler {
++
++class BrowserProfilerImpl;
++
++}  // namespace browser_profiler
++
++namespace content {
++
++// Tracing controller for browser profiler impl
++class CONTENT_EXPORT TracingControllerBrowserProfilerImpl {
++ public:
++  TracingControllerBrowserProfilerImpl();
++
++  // Return true if successfully start tracing
++  bool StartTracing(browser_profiler::BrowserProfilerImpl *browser_profiler_impl,
++      const std::string& categories, 
++      const std::string& trace_options_str);
++
++  void StopTracing(const base::FilePath& chrome_trace_file);
++
++ private:
++  void OnTracingStopped(const base::FilePath& file_path);
++
++  browser_profiler::BrowserProfilerImpl *browser_profiler_impl_;
++
++  base::WeakPtrFactory<TracingControllerBrowserProfilerImpl> weak_factory_;
++
++  DISALLOW_COPY_AND_ASSIGN(TracingControllerBrowserProfilerImpl);
++};
++
++}  // namespace content
++
++#endif  // CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_BROWSER_PROFILER_IMPL_H_
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index 57ed3e7..f7770e5 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -3688,9 +3688,10 @@ void WebContentsImpl::DidDisownOpener(RenderFrameHost* render_frame_host) {
+ }
+ 
+ void WebContentsImpl::DocumentOnLoadCompleted(
+-    RenderFrameHost* render_frame_host) {
++    RenderFrameHost* render_frame_host,
++    const ExperimentResult& experiment_result) {
+   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
+-                    DocumentOnLoadCompletedInMainFrame());
++                    DocumentOnLoadCompletedInMainFrame(experiment_result)); // ducalpha
+ 
+   // TODO(avi): Remove. http://crbug.com/170921
+   NotificationService::current()->Notify(
+diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
+index b5fe67e..1d83cfc 100644
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -26,6 +26,7 @@
+ #include "content/browser/renderer_host/render_widget_host_delegate.h"
+ #include "content/common/accessibility_mode_enums.h"
+ #include "content/common/content_export.h"
++#include "content/common/experiment_result.h"
+ #include "content/public/browser/color_chooser.h"
+ #include "content/public/browser/notification_observer.h"
+ #include "content/public/browser/notification_registrar.h"
+@@ -374,7 +375,8 @@ class CONTENT_EXPORT WebContentsImpl
+   virtual void DidAccessInitialDocument() OVERRIDE;
+   virtual void DidDisownOpener(RenderFrameHost* render_frame_host) OVERRIDE;
+   virtual void DocumentOnLoadCompleted(
+-      RenderFrameHost* render_frame_host) OVERRIDE;
++      RenderFrameHost* render_frame_host,
++      const ExperimentResult& experiment_result) OVERRIDE;
+   virtual void UpdateTitle(RenderFrameHost* render_frame_host,
+                            int32 page_id,
+                            const base::string16& title,
+diff --git a/content/common/experiment_result.cc b/content/common/experiment_result.cc
+new file mode 100644
+index 0000000..248f786
+--- /dev/null
++++ b/content/common/experiment_result.cc
+@@ -0,0 +1,14 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($DUC_LICENSE_URL)
++
++#include "content/common/experiment_result.h"
++
++namespace content {
++
++ExperimentResult::ExperimentResult()
++    : url(""),
++      navigation_start_monotonic_time(0.0),
++      load_event_end_monotonic_time(0.0) {
++}
++
++}  // namespace content
+diff --git a/content/common/experiment_result.h b/content/common/experiment_result.h
+new file mode 100644
+index 0000000..d74816a
+--- /dev/null
++++ b/content/common/experiment_result.h
+@@ -0,0 +1,22 @@
++// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
++// Licensed under MIT ($DUC_LICENSE_URL)
++
++#ifndef CONTENT_PUBLIC_COMMON_EXPERIMENT_RESULT_H_
++#define CONTENT_PUBLIC_COMMON_EXPERIMENT_RESULT_H_
++
++#include "url/gurl.h"
++
++namespace content {
++
++// This struct holds experiment result
++struct ExperimentResult {
++  ExperimentResult();
++
++  GURL url;
++  double navigation_start_monotonic_time;
++  double load_event_end_monotonic_time;
++};
++
++}  // namespace content
++
++#endif  // CONTENT_PUBLIC_COMMON_EXPERIMENT_RESULT_H_
+diff --git a/content/common/frame_messages.h b/content/common/frame_messages.h
+index 9c1c184..93fba85 100644
+--- a/content/common/frame_messages.h
++++ b/content/common/frame_messages.h
+@@ -7,6 +7,8 @@
+ 
+ #include "content/common/content_export.h"
+ #include "content/common/content_param_traits.h"
++#include "content/common/experiment_result.h"
++#include "content/common/experiment_result.h"
+ #include "content/common/frame_message_enums.h"
+ #include "content/common/frame_param.h"
+ #include "content/common/navigation_gesture.h"
+@@ -307,6 +309,16 @@ IPC_STRUCT_BEGIN(FrameHostMsg_BeginNavigation_Params)
+   IPC_STRUCT_MEMBER(bool, allow_download)
+ IPC_STRUCT_END()
+ 
++// ducalpha
++IPC_STRUCT_BEGIN(FrameHostMsg_DocumentOnLoadCompleted_Params)
++  // Experiment result
++  IPC_STRUCT_MEMBER(GURL, url)
++
++  IPC_STRUCT_MEMBER(double, navigation_start_monotonic_time)
++
++  IPC_STRUCT_MEMBER(double, load_event_end_monotonic_time)
++IPC_STRUCT_END()
++
+ // -----------------------------------------------------------------------------
+ // Messages sent from the browser to the renderer.
+ 
+@@ -516,7 +528,8 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DidFinishLoad,
+ 
+ // Sent when after the onload handler has been invoked for the document
+ // in this frame. Sent for top-level frames.
+-IPC_MESSAGE_ROUTED0(FrameHostMsg_DocumentOnLoadCompleted)
++IPC_MESSAGE_ROUTED1(FrameHostMsg_DocumentOnLoadCompleted,
++                    FrameHostMsg_DocumentOnLoadCompleted_Params /* ducalpha: experiment result */)
+ 
+ // Notifies that the initial empty document of a view has been accessed.
+ // After this, it is no longer safe to show a pending navigation's URL without
+diff --git a/content/content_browser.gypi b/content/content_browser.gypi
+index 84ff880..f96a4ff 100644
+--- a/content/content_browser.gypi
++++ b/content/content_browser.gypi
+@@ -1291,6 +1291,8 @@
+       'browser/tracing/etw_system_event_consumer_win.h',
+       'browser/tracing/trace_uploader.cc',
+       'browser/tracing/trace_uploader.h',
++      'browser/tracing/tracing_controller_browser_profiler_impl.cc',
++      'browser/tracing/tracing_controller_browser_profiler_impl.h',
+       'browser/tracing/tracing_controller_impl.cc',
+       'browser/tracing/tracing_controller_impl.h',
+       'browser/tracing/tracing_ui.cc',
+diff --git a/content/content_common.gypi b/content/content_common.gypi
+index 048ab0d..c54c702 100644
+--- a/content/content_common.gypi
++++ b/content/content_common.gypi
+@@ -212,6 +212,8 @@
+       'common/drag_messages.h',
+       'common/drag_traits.h',
+       'common/edit_command.h',
++      'common/experiment_result.cc',
++      'common/experiment_result.h',
+       'common/file_utilities_messages.h',
+       'common/fileapi/file_system_messages.h',
+       'common/fileapi/webblob_messages.h',
+diff --git a/content/public/android/java/src/org/chromium/content/common/ContentSwitches.java b/content/public/android/java/src/org/chromium/content/common/ContentSwitches.java
+index 3c2a35d..964ef68 100644
+--- a/content/public/android/java/src/org/chromium/content/common/ContentSwitches.java
++++ b/content/public/android/java/src/org/chromium/content/common/ContentSwitches.java
+@@ -15,6 +15,10 @@ public abstract class ContentSwitches {
+     // these flags.
+     public static final String ADD_OFFICIAL_COMMAND_LINE = "add-official-command-line";
+ 
++    // ducalpha
++    // Disables the browser profiler.
++    public static final String DISABLE_BROWSER_PROFILER = "disable-browser-profiler";
++
+     // Enables test intent handling.
+     public static final String ENABLE_TEST_INTENTS = "enable-test-intents";
+ 
+diff --git a/content/public/browser/web_contents_observer.h b/content/public/browser/web_contents_observer.h
+index f264392..aef723e 100644
+--- a/content/public/browser/web_contents_observer.h
++++ b/content/public/browser/web_contents_observer.h
+@@ -8,6 +8,7 @@
+ #include "base/process/kill.h"
+ #include "base/process/process_handle.h"
+ #include "content/common/content_export.h"
++#include "content/common/experiment_result.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/common/frame_navigate_params.h"
+ #include "content/public/common/page_transition_types.h"
+@@ -175,6 +176,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
+   // completed.
+   virtual void DocumentOnLoadCompletedInMainFrame() {}
+ 
++  // ducalpha: augment experiment result
++  virtual void DocumentOnLoadCompletedInMainFrame(const ExperimentResult& experiment_result) {}
++
+   // This method is invoked when the document in the given frame finished
+   // loading. At this point, scripts marked as defer were executed, and
+   // content scripts marked "document_end" get injected into the frame.
+diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
+index 30d405f..66bd21c 100644
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -12,6 +12,7 @@
+ #include "base/debug/alias.h"
+ #include "base/debug/asan_invalid_access.h"
+ #include "base/debug/dump_without_crashing.h"
++#include "base/debug/trace_event.h" // ducalpha
+ #include "base/i18n/char_iterator.h"
+ #include "base/metrics/histogram.h"
+ #include "base/process/kill.h"
+@@ -108,6 +109,7 @@
+ #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
+ #include "third_party/WebKit/public/web/WebPlugin.h"
+ #include "third_party/WebKit/public/web/WebPluginParams.h"
++#include "third_party/WebKit/public/web/WebPerformance.h"
+ #include "third_party/WebKit/public/web/WebRange.h"
+ #include "third_party/WebKit/public/web/WebScriptSource.h"
+ #include "third_party/WebKit/public/web/WebSearchableFormData.h"
+@@ -144,6 +146,8 @@
+ #include "content/renderer/media/crypto/renderer_cdm_manager.h"
+ #endif
+ 
++// #define MARK_FTRACE // ducalpha
++
+ using blink::WebContextMenuData;
+ using blink::WebData;
+ using blink::WebDataSource;
+@@ -782,6 +786,12 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
+ }
+ 
+ void RenderFrameImpl::OnNavigate(const FrameMsg_Navigate_Params& params) {
++  TRACE_EVENT_INSTANT0("renderer", 
++        "Start Navigation at RenderFrameImpl::OnNavigate",
++        TRACE_EVENT_SCOPE_GLOBAL); // ducalpha
++#ifdef MARK_FTRACE
++  base::debug::TraceLog::GetInstance()->AddSyncMetadataEvent("OnNavigate");
++#endif
+   MaybeHandleDebugURL(params.url);
+   if (!render_view_->webview())
+     return;
+@@ -2211,8 +2221,19 @@ void RenderFrameImpl::didFinishDocumentLoad(blink::WebLocalFrame* frame) {
+ 
+ void RenderFrameImpl::didHandleOnloadEvents(blink::WebLocalFrame* frame) {
+   DCHECK(!frame_ || frame_ == frame);
+-  if (!frame->parent())
+-    Send(new FrameHostMsg_DocumentOnLoadCompleted(routing_id_));
++  if (!frame->parent()) {
++    // ducalpha
++    FrameHostMsg_DocumentOnLoadCompleted_Params params;
++    params.url = frame->document().url();
++    params.navigation_start_monotonic_time = frame->performance().monotonicNavigationStart();
++    params.load_event_end_monotonic_time= frame->performance().monotonicLoadEventEnd();
++
++    Send(new FrameHostMsg_DocumentOnLoadCompleted(routing_id_, params));
++
++#ifdef MARK_FTRACE
++    base::debug::TraceLog::GetInstance()->AddSyncMetadataEvent("Chromium: didHandleOnloadEvents");
++#endif
++  }
+ }
+ 
+ void RenderFrameImpl::didFailLoad(blink::WebLocalFrame* frame,
+diff --git a/content/shell/android/java/res/layout/shell_view.xml b/content/shell/android/java/res/layout/shell_view.xml
+index d6c15d6..b47b284 100644
+--- a/content/shell/android/java/res/layout/shell_view.xml
++++ b/content/shell/android/java/res/layout/shell_view.xml
+@@ -40,6 +40,11 @@
+             android:layout_height="38dp"
+             android:src="@android:drawable/ic_media_next"
+             android:scaleType="center" />
++        <ImageButton android:id="@+id/start_experiment"
++            android:layout_width="38dp"
++            android:layout_height="38dp"
++            android:src="@android:drawable/ic_media_play"
++            android:scaleType="center" />
+     </LinearLayout>
+     <FrameLayout android:id="@+id/contentview_holder"
+         android:layout_width="match_parent"
+diff --git a/content/shell/android/java/src/org/chromium/content_shell/ShellManager.java b/content/shell/android/java/src/org/chromium/content_shell/ShellManager.java
+index aab6caa..9d93c06 100644
+--- a/content/shell/android/java/src/org/chromium/content_shell/ShellManager.java
++++ b/content/shell/android/java/src/org/chromium/content_shell/ShellManager.java
+@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
+ import android.view.View;
+ import android.widget.FrameLayout;
+ 
++import org.chromium.base.BrowserProfilerManager;
+ import org.chromium.base.CalledByNative;
+ import org.chromium.base.CommandLine;
+ import org.chromium.base.JNINamespace;
+@@ -46,6 +47,10 @@ public class ShellManager extends FrameLayout {
+     public ShellManager(final Context context, AttributeSet attrs) {
+         super(context, attrs);
+         nativeInit(this);
++
++        // ducalpha: prevent loading startup URL
++        sStartup = CommandLine.getInstance().hasSwitch(BrowserProfilerManager.DISABLE_BROWSER_PROFILER);
++
+         mContentViewClient = new ContentViewClient() {
+             @Override
+             public ContentVideoViewClient getContentVideoViewClient() {
+diff --git a/content/shell/android/shell_apk/src/org/chromium/content_shell_apk/ContentShellActivity.java b/content/shell/android/shell_apk/src/org/chromium/content_shell_apk/ContentShellActivity.java
+index 4e5edbc..a1040f4 100644
+--- a/content/shell/android/shell_apk/src/org/chromium/content_shell_apk/ContentShellActivity.java
++++ b/content/shell/android/shell_apk/src/org/chromium/content_shell_apk/ContentShellActivity.java
+@@ -13,6 +13,7 @@ import android.view.KeyEvent;
+ import android.widget.Toast;
+ 
+ import org.chromium.base.BaseSwitches;
++import org.chromium.base.BrowserProfilerManager;
+ import org.chromium.base.CommandLine;
+ import org.chromium.base.MemoryPressureListener;
+ import org.chromium.base.library_loader.LibraryLoader;
+@@ -32,6 +33,7 @@ import org.chromium.ui.base.WindowAndroid;
+ public class ContentShellActivity extends Activity {
+ 
+     public static final String COMMAND_LINE_FILE = "/data/local/tmp/content-shell-command-line";
++    public static final String CPU_INFO_COMMAND_LINE_FILE = "/data/local/tmp/cpu-info-command-line";
+     private static final String TAG = "ContentShellActivity";
+ 
+     private static final String ACTIVE_SHELL_URL_KEY = "activeUrl";
+@@ -39,6 +41,7 @@ public class ContentShellActivity extends Activity {
+ 
+     private ShellManager mShellManager;
+     private WindowAndroid mWindowAndroid;
++    private BrowserProfilerManager mBrowserProfilerManager;
+ 
+     @Override
+     protected void onCreate(final Bundle savedInstanceState) {
+@@ -51,6 +54,14 @@ public class ContentShellActivity extends Activity {
+             if (commandLineParams != null) {
+                 CommandLine.getInstance().appendSwitchesAndArguments(commandLineParams);
+             }
++
++            // ducalpha: append the cpu-info
++            // Why not passing cpu-info using intent?
++            // Because browser launch will then depend on a launcher tool
++            String[] cpuInfoParams = CommandLine.readSwitchesAndArgumentsFromFile(CPU_INFO_COMMAND_LINE_FILE);
++            if (cpuInfoParams != null) {
++                CommandLine.getInstance().appendSwitchesAndArguments(cpuInfoParams);
++            }
+         }
+         waitForDebuggerIfNeeded();
+ 
+@@ -102,6 +113,21 @@ public class ContentShellActivity extends Activity {
+                 System.exit(-1);
+             }
+         }
++
++        if (!CommandLine.getInstance().hasSwitch(ContentSwitches.DISABLE_BROWSER_PROFILER)) {
++            mBrowserProfilerManager = new BrowserProfilerManager(this,
++                    new BrowserProfilerManager.BrowserShellController() {
++                        @Override
++                        public void closeActiveShell() {
++                            Shell activeShell = getActiveShell();
++                            if (activeShell != null) {
++                                activeShell.close();
++                            }
++                        }
++                    },
++                    COMMAND_LINE_FILE,
++                    CPU_INFO_COMMAND_LINE_FILE);
++        }
+     }
+ 
+     private void finishInitialization(Bundle savedInstanceState) {
+diff --git a/content/shell/android/shell_manager.cc b/content/shell/android/shell_manager.cc
+index 4d11578..6d1a281 100644
+--- a/content/shell/android/shell_manager.cc
++++ b/content/shell/android/shell_manager.cc
+@@ -4,11 +4,13 @@
+ 
+ #include "content/shell/android/shell_manager.h"
+ 
++#include "base/android/browser_profiler_manager.h"
+ #include "base/android/jni_android.h"
+ #include "base/android/jni_string.h"
+ #include "base/android/scoped_java_ref.h"
+ #include "base/bind.h"
+ #include "base/lazy_instance.h"
++#include "base/logging.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/shell/browser/shell.h"
+ #include "content/shell/browser/shell_browser_context.h"
+@@ -57,9 +59,19 @@ static void Init(JNIEnv* env, jclass clazz, jobject obj) {
+ }
+ 
+ void LaunchShell(JNIEnv* env, jclass clazz, jstring jurl) {
++  
++  GURL url;
++  std::string experiment_url;
++  if (base::android::BrowserProfilerManager::GetInstance()->Prepare(&experiment_url)) {
++    url = GURL(experiment_url);
++  } else {
++    url = GURL(base::android::ConvertJavaStringToUTF8(env, jurl));
++  }
++
+   ShellBrowserContext* browserContext =
+       ShellContentBrowserClient::Get()->browser_context();
+-  GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
++  // original
++  // GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
+   Shell::CreateNewWindow(browserContext,
+                          url,
+                          NULL,
+diff --git a/content/shell/browser/shell.h b/content/shell/browser/shell.h
+index 22424d9..fb5e337 100644
+--- a/content/shell/browser/shell.h
++++ b/content/shell/browser/shell.h
+@@ -12,6 +12,7 @@
+ #include "base/memory/scoped_ptr.h"
+ #include "base/strings/string_piece.h"
+ #include "build/build_config.h"
++#include "content/common/experiment_result.h"
+ #include "content/public/browser/web_contents_delegate.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "ipc/ipc_channel.h"
+@@ -157,6 +158,11 @@ class Shell : public WebContentsDelegate,
+       OVERRIDE;
+   virtual void WebContentsFocused(WebContents* contents) OVERRIDE;
+ 
++#if defined(OS_ANDROID)  // ducalpha 
++  virtual void DocumentOnLoadCompletedInMainFrame(
++      const ExperimentResult& experiment_result) OVERRIDE;
++#endif
++
+  private:
+   enum UIControl {
+     BACK_BUTTON,
+diff --git a/content/shell/browser/shell_android.cc b/content/shell/browser/shell_android.cc
+index 5ed03cd..40e3bf1 100644
+--- a/content/shell/browser/shell_android.cc
++++ b/content/shell/browser/shell_android.cc
+@@ -6,8 +6,10 @@
+ 
+ #include <jni.h>
+ 
++#include "base/debug/trace_event.h"
+ #include "base/android/jni_string.h"
+ #include "base/android/scoped_java_ref.h"
++#include "base/android/browser_profiler_manager.h"
+ #include "base/command_line.h"
+ #include "base/logging.h"
+ #include "base/strings/string_piece.h"
+@@ -108,4 +110,14 @@ void CloseShell(JNIEnv* env, jclass clazz, jlong shellPtr) {
+   shell->Close();
+ }
+ 
++// ducalpha
++void Shell::DocumentOnLoadCompletedInMainFrame(const ExperimentResult& experiment_result) {
++  TRACE_EVENT_INSTANT0("webkit", "DocumentOnLoadCompletedInMainFrame", 
++      TRACE_EVENT_SCOPE_GLOBAL);
++  base::android::BrowserProfilerManager::GetInstance()->PostProcess(
++      experiment_result.url.spec(),
++      experiment_result.navigation_start_monotonic_time,
++      experiment_result.load_event_end_monotonic_time);
++}
++
+ }  // namespace content
+diff --git a/content/shell/browser/shell_url_request_context_getter.cc b/content/shell/browser/shell_url_request_context_getter.cc
+index 7289089..356c95c 100644
+--- a/content/shell/browser/shell_url_request_context_getter.cc
++++ b/content/shell/browser/shell_url_request_context_getter.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "content/shell/browser/shell_url_request_context_getter.h"
+ 
++#include "base/android/browser_profiler_manager.h"
+ #include "base/command_line.h"
+ #include "base/logging.h"
+ #include "base/strings/string_number_conversions.h"
+@@ -137,6 +138,8 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
+             new net::HttpServerPropertiesImpl()));
+ 
+     base::FilePath cache_path = base_path_.Append(FILE_PATH_LITERAL("Cache"));
++    // ducalpha
++    base::android::BrowserProfilerManager::GetInstance()->ClearCacheIfNeeded(cache_path);
+     net::HttpCache::DefaultBackend* main_backend =
+         new net::HttpCache::DefaultBackend(
+             net::DISK_CACHE,

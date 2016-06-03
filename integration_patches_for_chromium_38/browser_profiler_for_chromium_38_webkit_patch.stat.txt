@@ -1,0 +1,9 @@
+ Source/core/frame/LocalDOMWindow.cpp      |  5 +++++
+ Source/core/loader/DocumentLoadTiming.cpp |  5 +++++
+ Source/core/timing/PerformanceTiming.cpp  | 19 +++++++++++++++++++
+ Source/core/timing/PerformanceTiming.h    |  3 +++
+ Source/platform/EventTracer.cpp           | 20 ++++++++++++++++++++
+ Source/platform/EventTracer.h             |  4 ++++
+ Source/web/WebPerformance.cpp             | 11 +++++++++++
+ public/web/WebPerformance.h               |  3 +++
+ 8 files changed, 70 insertions(+)
