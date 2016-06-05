@@ -175,8 +175,8 @@ index 0000000..b4d0018
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
 +// Licensed under MIT ($LICENSE_URL)
 +
-+#ifndef CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
-+#define CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
++#ifndef BASE_ANDROID_BROWSER_PROFILER_MANAGER_H_
++#define BASE_ANDROID_BROWSER_PROFILER_MANAGER_H_
 +
 +#include <jni.h>
 +
@@ -248,7 +248,7 @@ index 0000000..b4d0018
 +
 +} // namespace android
 +} // namespace base
-+#endif // CONTENT_SHELL_ANDROID_BROWSER_PROFILER_BROWSER_PROFILER_H_
++#endif // BASE_ANDROID_BROWSER_PROFILER_MANAGER_H_
 diff --git a/base/android/java/src/org/chromium/base/BrowserProfilerManager.java b/base/android/java/src/org/chromium/base/BrowserProfilerManager.java
 new file mode 100644
 index 0000000..e64388e
