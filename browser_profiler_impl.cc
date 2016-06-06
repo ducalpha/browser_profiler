@@ -462,9 +462,11 @@ void BrowserProfilerImpl::StopTracers() {
   }
 }
 
+#if defined(CHROMIUM_BUILD)
 void BrowserProfilerImpl::OnChromeTracingStopped() {
   StopTracersSecondHalf();
 }
+#endif
 
 void BrowserProfilerImpl::StopTracersSecondHalf() {
   if (setting_->measure_power) {
