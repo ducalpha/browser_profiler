@@ -51,7 +51,7 @@ bool ReadServerIpAndPort(const base::FilePath& server_config_filepath,
     std::pair<std::string, uint32_t> *server_ip_port) {
   std::string server_config;
   if (!base::ReadFileToString(server_config_filepath, &server_config)) {
-    LOG(ERROR) << "Cannot read server config file at " << server_config_filepath.value();
+    CHROMIUM_LOG(ERROR) << "Cannot read server config file at " << server_config_filepath.value();
     return false;
   }
 
@@ -67,7 +67,7 @@ bool ReadServerIpAndPort(const base::FilePath& server_config_filepath,
         base::SplitString(line, ":", base::WhitespaceHandling::TRIM_WHITESPACE,
                           base::SplitResult::SPLIT_WANT_NONEMPTY);
     if (components.size() != 2) {
-      LOG(ERROR) << "Error parsing line: " << line;
+      CHROMIUM_LOG(ERROR) << "Error parsing line: " << line;
       continue;
     }
     for (size_t j = 0; j < components.size(); ++j) {
@@ -80,7 +80,7 @@ bool ReadServerIpAndPort(const base::FilePath& server_config_filepath,
       server_ip_port->first = value;
     } else if (key.compare(kServerPort) == 0) {
       if (!base::StringToUint(value, &server_ip_port->second)) {
-        LOG(ERROR) << "Error parsing server port: " << value;
+        CHROMIUM_LOG(ERROR) << "Error parsing server port: " << value;
         return false;
       }
     } else {
@@ -121,7 +121,7 @@ std::string PowerToolController::Message::ToString() const {
 PowerToolController::PowerToolController(const base::FilePath& server_config_filepath) {
   std::pair<std::string, uint32_t> server_ip_port;
   if (!ReadServerIpAndPort(server_config_filepath, &server_ip_port)) {
-    LOG(FATAL) << "Cannot read server config file at " << server_config_filepath.value();
+    CHROMIUM_LOG(FATAL) << "Cannot read server config file at " << server_config_filepath.value();
   }
 
   VLOG(1) << "Server is at " << server_ip_port.first << ":" << server_ip_port.second;
@@ -132,7 +132,7 @@ PowerToolController::PowerToolController(const base::FilePath& server_config_fil
 
 void PowerToolController::Connect() {
   if (!power_tool_connection_->Connect()) {
-    LOG(FATAL) << "Fail to connection to server";
+    CHROMIUM_LOG(FATAL) << "Fail to connection to server";
   }
 }
 
@@ -140,7 +140,7 @@ bool PowerToolController::StartSampling() {
   Message message(kCommandKey, kStartSamplingCommand);
 
   if (!SyncSendAndCheckResponse(message.ToString())) {
-    LOG(ERROR) << "Failed to send " << kCommandKey;
+    CHROMIUM_LOG(ERROR) << "Failed to send " << kCommandKey;
     return false;
   }
 
@@ -166,7 +166,7 @@ bool PowerToolController::SyncSendAndCheckResponse(const std::string& message) {
 
   if (!(key_values.size() == 2 && key_values[0].compare(kStatusKey) == 0 &&
         key_values[1].compare(kOkValue) == 0)) {
-    LOG(ERROR) << "Response message is not OK but: " << response;
+    CHROMIUM_LOG(ERROR) << "Response message is not OK but: " << response;
     // return false;
   }
 
@@ -180,7 +180,7 @@ bool PowerToolController::StopSampling(const std::string& result_keys, const std
   stop_sampling_message.Add(kResultValuesKey, result_values);
 
   if (!SyncSendAndCheckResponse(stop_sampling_message.ToString())) {
-    LOG(ERROR) << "Failed to send stop sampling command";
+    CHROMIUM_LOG(ERROR) << "Failed to send stop sampling command";
     return false;
   }
 
@@ -191,7 +191,7 @@ bool PowerToolController::FinishAllExp() {
   Message message(kCommandKey, kFinishAllExperimentsCommand);
 
   if (!SyncSendAndCheckResponse(message.ToString())) {
-    LOG(ERROR) << "Failed to send " << kFinishAllExperimentsCommand;
+    CHROMIUM_LOG(ERROR) << "Failed to send " << kFinishAllExperimentsCommand;
     return false;
   }
 

@@ -87,13 +87,13 @@ void ExperimentResult::WriteToFile(const base::FilePath& filepath, bool include_
   if (include_header) {
     std::string header = LogHeaderLine() + "\n";
     if (WriteFile(filepath, header.c_str(), header.length()) == -1) {
-      LOG(FATAL) << "Cannot write result header at " << filepath.value();
+      CHROMIUM_LOG(FATAL) << "Cannot write result header at " << filepath.value();
     }
   }
 
   std::string result_line = LogLine() + "\n";
   if (AppendToFile(filepath, result_line.c_str(), result_line.length()) == -1) {
-      LOG(FATAL) << "Cannot write experiment result at " << filepath.value();
+      CHROMIUM_LOG(FATAL) << "Cannot write experiment result at " << filepath.value();
   }
 }
 

@@ -120,7 +120,7 @@ PowerToolConnectionImpl::~PowerToolConnectionImpl() {
 bool PowerToolConnectionImpl::Connect() {
   int socket_to_server = ConnectTo(server_ip_, server_port_);
   if (socket_to_server < 0) {
-    LOG(ERROR) << "Failed to connection server at " 
+    CHROMIUM_LOG(ERROR) << "Failed to connection server at " 
       << server_ip_ << ":" << server_port_;
     return false;
   }
@@ -131,12 +131,12 @@ bool PowerToolConnectionImpl::Connect() {
 
 bool PowerToolConnectionImpl::SyncReceiveMessage(std::string* message) {
   if (socket_to_server_ == 0) {
-    LOG(ERROR) << "Socket is not connected";
+    CHROMIUM_LOG(ERROR) << "Socket is not connected";
     return false;
   }
 
   if (ReadLine(socket_to_server_, message) == -1) {
-    LOG(ERROR) << "Cannot read response";
+    CHROMIUM_LOG(ERROR) << "Cannot read response";
     return false;
   }
 
@@ -145,12 +145,12 @@ bool PowerToolConnectionImpl::SyncReceiveMessage(std::string* message) {
 
 bool PowerToolConnectionImpl::SyncSendMessage(const std::string& message) {
   if (socket_to_server_ == 0) {
-    LOG(ERROR) << "Socket is not connected";
+    CHROMIUM_LOG(ERROR) << "Socket is not connected";
     return false;
   }
 
   if (!Send(socket_to_server_, message.c_str(), message.length(), 0)) {
-    LOG(ERROR) << "Fail to send message";
+    CHROMIUM_LOG(ERROR) << "Fail to send message";
     return false;
   }
   return true;

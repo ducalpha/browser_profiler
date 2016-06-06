@@ -134,7 +134,7 @@ index 0000000..f6dbf9a
 +void BrowserProfilerManager::DoDelayedTask(DelayedTaskCallback delayed_task_callback,
 +    long delay_millis) {
 +  if (delayed_task_callback_ != NULL) {
-+    LOG(ERROR) << "Another delayed task callback is queued";
++    CHROMIUM_LOG(ERROR) << "Another delayed task callback is queued";
 +    return;
 +  }
 +
@@ -490,7 +490,7 @@ index 0000000..0a5fc85
 +    const std::string& categories, 
 +      const std::string& trace_options_str) {
 +  if (browser_profiler_impl_ != NULL) {
-+    LOG(ERROR) << "Another browser profiler already started tracing";
++    CHROMIUM_LOG(ERROR) << "Another browser profiler already started tracing";
 +    return false;
 +  }
 +
@@ -512,7 +512,7 @@ index 0000000..0a5fc85
 +        chrome_trace_file,
 +        base::Bind(&TracingControllerBrowserProfilerImpl::OnTracingStopped,
 +          weak_factory_.GetWeakPtr()))) {
-+    LOG(ERROR) << "Stop tracing async failed, forcing an immediate stop";
++    CHROMIUM_LOG(ERROR) << "Stop tracing async failed, forcing an immediate stop";
 +    OnTracingStopped(chrome_trace_file);
 +  }
 +}
@@ -522,7 +522,7 @@ index 0000000..0a5fc85
 +  VLOG(0) << "Chrome tracing written in " << file_path.value();
 +
 +  if (browser_profiler_impl_ == NULL) {
-+    LOG(ERROR) << "No browser profiler to callback";
++    CHROMIUM_LOG(ERROR) << "No browser profiler to callback";
 +    return;
 +  }
 +

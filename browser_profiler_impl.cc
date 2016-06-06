@@ -52,14 +52,14 @@ void PrefixFile(const base::FilePath& file_path, const std::string& prefix) {
   for (size_t i = 0; base::PathExists(new_file); ++i) {
     new_file = new_file.InsertBeforeExtension(base::UintToString(i));
     if (i >= max_try) {
-      LOG(ERROR) << "Cannot find unique name for prefixed experiment result";
+      CHROMIUM_LOG(ERROR) << "Cannot find unique name for prefixed experiment result";
       break;
     }
   }
 
   base::File::Error error;
   if (!base::ReplaceFile(file_path, new_file, &error)) {
-    LOG(ERROR) << "Fail to prefix the experiment result file from " << file_path.value()
+    CHROMIUM_LOG(ERROR) << "Fail to prefix the experiment result file from " << file_path.value()
         << " to " << new_file.value() << ": " << base::File::ErrorToString(error);
   }
 }
@@ -89,18 +89,18 @@ bool ExecuteCommand(const base::CommandLine& cmd) {
 
   base::Process process = base::LaunchProcess(cmd, base::LaunchOptions());
   if (!process.IsValid()) {
-    LOG(ERROR) << "Cannot run command " << cmd.GetCommandLineString();
+    CHROMIUM_LOG(ERROR) << "Cannot run command " << cmd.GetCommandLineString();
     return false;
   }
 
   int exit_code;
   if (!process.WaitForExit(&exit_code)) {
-    LOG(ERROR) << "Cannot get return code for command " << cmd.GetCommandLineString();
+    CHROMIUM_LOG(ERROR) << "Cannot get return code for command " << cmd.GetCommandLineString();
     return false;
   }
 
   if (exit_code != 0) {
-    LOG(ERROR) << "Running " << cmd.GetCommandLineString()
+    CHROMIUM_LOG(ERROR) << "Running " << cmd.GetCommandLineString()
         << " failed with code " << exit_code;
     return false;
   }
@@ -142,7 +142,7 @@ double MonotonicNow() {
 bool EnsureInitializeCpuInfoCommandLine(const base::FilePath& cpu_info_cmd,
     const base::FilePath& cpu_info_command_line_file) {
   if (!ExecuteCommandAsRoot(cpu_info_cmd.value() + " > " + cpu_info_command_line_file.value())) {
-    LOG(ERROR) << "Cannot initialize cpu info command line file";
+    CHROMIUM_LOG(ERROR) << "Cannot initialize cpu info command line file";
     return false;
   }
 
@@ -261,7 +261,7 @@ void BrowserProfilerImpl::Initialize(const base::FilePath& browser_command_line_
 
       // Initialize cpu info if needed
       if (!EnsureInitializeCpuInfoCommandLine(constants_.kCpuInfoExecutable, cpu_info_command_line_file)) {
-        LOG(FATAL) << "Fail to initialize cpu info file";
+        CHROMIUM_LOG(FATAL) << "Fail to initialize cpu info file";
       } else {
         // Restart web browser so that Browser Profiler Client
         // can load it to the command line
@@ -335,7 +335,7 @@ void BrowserProfilerImpl::ClearCacheIfNeeded(const base::FilePath& cache_path) {
     return;
 
   if (!base::DeleteFile(cache_path, /* recursive */ true)) {
-    LOG(ERROR) << "Unable to delete cache folder";
+    CHROMIUM_LOG(ERROR) << "Unable to delete cache folder";
     return;
   }
 
@@ -395,7 +395,7 @@ void BrowserProfilerImpl::PostProcessInternalSecondHalf() {
   UpdateExperimentIndexAndCommandLine();
 
   state_.last_experiment_id = experiment_id_;
-  LOG(INFO) << "Last experiment id: " << state_.last_experiment_id;
+  CHROMIUM_LOG(INFO) << "Last experiment id: " << state_.last_experiment_id;
   state_.SaveToFile(constants_.kBpStateFile);
 
   RestartBrowser();
@@ -491,7 +491,7 @@ void BrowserProfilerImpl::RestartBrowser() {
     ++restart_trial;
   }
 
-  LOG(FATAL) << "Cannot restart browser";
+  CHROMIUM_LOG(FATAL) << "Cannot restart browser";
 }
 
 // Does not include sync workload end time which is used for power tool controller server only
@@ -530,7 +530,7 @@ void BrowserProfilerImpl::ManipulateCommandLineForHotPageLoad() {
   std::string new_command_line;
   
   if (!CheckedReadFileToString(browser_command_line_file_, &new_command_line)) {
-    LOG(FATAL) << "Failed to read current command line file at "
+    CHROMIUM_LOG(FATAL) << "Failed to read current command line file at "
         << browser_command_line_file_.value();
     return;
   }
@@ -547,7 +547,7 @@ void BrowserProfilerImpl::ManipulateCommandLineForHotPageLoad() {
 
   /* Write to the command line file */
   if (!CheckedWriteStringToFile(browser_command_line_file_, new_command_line)) {
-    LOG(FATAL) << "Failed to manipulate command line for hot page load";
+    CHROMIUM_LOG(FATAL) << "Failed to manipulate command line for hot page load";
   }
 }
 
@@ -558,11 +558,11 @@ void BrowserProfilerImpl::ReplaceCurrentWithNextExperimentCommandLine() {
   // ExecuteCommandAsRoot does not work well, maybe because of the ' sign in the command
   // E.g., The command line becomes su -c --easure-power --v=0' echo 'chrome
   if (system(cmd.c_str()) < 0) {
-    LOG(FATAL) << "Writing next command line failed";
+    CHROMIUM_LOG(FATAL) << "Writing next command line failed";
   }
   std::string change_permission = "chmod 666 " + browser_command_line_file_.value();
   if (!ExecuteCommandAsRoot(change_permission)) {
-    LOG(FATAL) << "Writing next command line failed";
+    CHROMIUM_LOG(FATAL) << "Writing next command line failed";
   }
 }
 
@@ -577,7 +577,7 @@ void BrowserProfilerImpl::PostProcessAfterAllExperiments() {
     power_tool_controller_->Connect();
 
     if (!power_tool_controller_->FinishAllExp()) {
-      LOG(FATAL) << "Cannot send finish all experiments command";
+      CHROMIUM_LOG(FATAL) << "Cannot send finish all experiments command";
     }
 
     // Disconnect the connection to the server
@@ -612,7 +612,7 @@ std::string BrowserProfilerImpl::GenerateExperimentId(
 
   // month-day_hour.minute.second{a.m.,p.m.}
   if (!std::strftime(now_formatted_str, kTimeSize, "%m-%d_%I.%M.%S%p", std::localtime(&t))) {
-    LOG(ERROR) << "Cannot get formatted now";
+    CHROMIUM_LOG(ERROR) << "Cannot get formatted now";
   }
 
   std::string hardware_model_name;
@@ -626,7 +626,7 @@ std::string BrowserProfilerImpl::GenerateExperimentId(
 
 void BrowserProfilerImpl::StartPowerSampling() {
   if (!power_tool_controller_->StartSampling()) {
-    LOG(FATAL) << "Cannot start sampling power"; 
+    CHROMIUM_LOG(FATAL) << "Cannot start sampling power"; 
   }
 }
 
@@ -651,7 +651,7 @@ void BrowserProfilerImpl::StopPowerSampling() {
 
   if (!power_tool_controller_->StopSampling(
         experiment_result_.LogHeaderLine(), experiment_result_.LogLine())) {
-    LOG(FATAL) << "Cannot stop sampling power"; 
+    CHROMIUM_LOG(FATAL) << "Cannot stop sampling power"; 
   }
 }
 
@@ -694,21 +694,21 @@ void BrowserProfilerImpl::UpdateExperimentIndexAndCommandLine() {
 void BrowserProfilerImpl::BackupCurrentCommandLine() {
   if (!base::CopyFile(browser_command_line_file_,
           GenerateBackupFileName(browser_command_line_file_))) {
-    LOG(ERROR) << "Cannot backup current command line";
+    CHROMIUM_LOG(ERROR) << "Cannot backup current command line";
   }
 }
 
 void BrowserProfilerImpl::RestoreBackupCommandLine() {
     if (!base::CopyFile(GenerateBackupFileName(browser_command_line_file_),
             browser_command_line_file_)) {
-      LOG(ERROR) << "Cannot restore original command line";
+      CHROMIUM_LOG(ERROR) << "Cannot restore original command line";
     }
 }
 
 std::string BrowserProfilerImpl::BrowserCommandLine() {
   std::string current_command_line_;
   if (!CheckedReadFileToString(browser_command_line_file_, &current_command_line_)) {
-    LOG(FATAL) << "Cannot read current command line";
+    CHROMIUM_LOG(FATAL) << "Cannot read current command line";
   }
 
   TrimTrailingNewLine(&current_command_line_);
@@ -721,7 +721,7 @@ void BrowserProfilerImpl::StartChromeTracing() {
   VLOG(0) << "Start Chrome Tracing";
   if (!chrome_tracing_controller_.StartTracing(this, setting_->tracing_categories,
         "record-as-much-as-possible")) {
-    LOG(ERROR) << "Failed to start ChromeTracing";
+    CHROMIUM_LOG(ERROR) << "Failed to start ChromeTracing";
   } else {
     chrome_tracing_started_ = true;
   }
@@ -829,7 +829,7 @@ BrowserProfilerImpl::Setting::Setting()
   std::string num_try_str = command_line.GetSwitchValueASCII(switches::kNumTryPerUrl);
   if (!num_try_str.empty()) {
     if (!base::StringToUint(num_try_str, &num_try_per_url)) { 
-      LOG(ERROR) << "Cannot parse switch " << switches::kNumTryPerUrl << ": " << num_try_str;
+      CHROMIUM_LOG(ERROR) << "Cannot parse switch " << switches::kNumTryPerUrl << ": " << num_try_str;
     }
   }
 
@@ -840,7 +840,7 @@ BrowserProfilerImpl::Setting::Setting()
   std::string utt_str = command_line.GetSwitchValueASCII(switches::kUserThinkTimeMillis);
   if (!utt_str.empty()) {
     if (!base::StringToUint(utt_str, &user_think_time_millis)) { 
-      LOG(ERROR) << "Cannot parse switch " << switches::kUserThinkTimeMillis << ": " << utt_str;
+      CHROMIUM_LOG(ERROR) << "Cannot parse switch " << switches::kUserThinkTimeMillis << ": " << utt_str;
     }
   }
 

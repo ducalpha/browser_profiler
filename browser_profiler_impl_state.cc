@@ -16,14 +16,14 @@ bool ReadExperimentCommandLines(
       const base::FilePath& experiment_command_lines_file,
       std::vector<std::string> *experiment_command_lines) {
   if (!base::PathExists(experiment_command_lines_file)) {
-    LOG(ERROR) << "Experiment command line file not exist at: " << experiment_command_lines_file.value();
+    CHROMIUM_LOG(ERROR) << "Experiment command line file not exist at: " << experiment_command_lines_file.value();
     return false;
   }
 
   // More memory consumption, O(n), but reduce disk I/O by reading once
   std::string lines;
   if (!base::ReadFileToString(experiment_command_lines_file, &lines)) {
-    LOG(FATAL) << "Failed to read experiment command line file";
+    CHROMIUM_LOG(FATAL) << "Failed to read experiment command line file";
     return false;
   }
 
@@ -43,7 +43,7 @@ bool ReadExperimentUrlList(const base::FilePath& url_list_file,
       std::vector<std::string> *url_list) {
   std::string lines; 
   if (!base::ReadFileToString(url_list_file, &lines)) {
-    LOG(FATAL) << "Cannot read url list at " << url_list_file.value();
+    CHROMIUM_LOG(FATAL) << "Cannot read url list at " << url_list_file.value();
     return false;
   }
 
@@ -98,11 +98,11 @@ void BrowserProfilerImplState::Initialize(const base::FilePath& experiment_comma
 
   if (!ReadExperimentCommandLines(experiment_command_lines_file,
           &experiment_command_lines)) {
-    LOG(ERROR) << "Fail to read experiment command lines";
+    CHROMIUM_LOG(ERROR) << "Fail to read experiment command lines";
   }
 
   if (!ReadExperimentUrlList(url_list_file, &experiment_urls)) {
-    LOG(FATAL) << "Fail to read experiment url list";
+    CHROMIUM_LOG(FATAL) << "Fail to read experiment url list";
   }
 }
 
@@ -111,7 +111,7 @@ void BrowserProfilerImplState::Initialize(const base::FilePath& experiment_comma
   do { \
     stream << variable << std::endl; \
     if (!stream.good()) { \
-      LOG(FATAL) << "Error writing string to stream"; \
+      CHROMIUM_LOG(FATAL) << "Error writing string to stream"; \
       return false; \
     } \
  } while (0);
@@ -150,7 +150,7 @@ bool BrowserProfilerImplState::SaveToFile(const base::FilePath& file_name) {
   do { \
     stream >> variable; \
     if (!stream.good()) { \
-      LOG(FATAL) << "Error parsing string from state file (" << file_name.value() \
+      CHROMIUM_LOG(FATAL) << "Error parsing string from state file (" << file_name.value() \
           << "): " << state_str; \
       return false; \
     } \
@@ -159,13 +159,13 @@ bool BrowserProfilerImplState::SaveToFile(const base::FilePath& file_name) {
 // Load in the inverse order of saving
 bool BrowserProfilerImplState::LoadFromFile(const base::FilePath& file_name) {
   if (!base::PathExists(file_name)) {
-    LOG(ERROR) << "State file not exist at: " << file_name.value();
+    CHROMIUM_LOG(ERROR) << "State file not exist at: " << file_name.value();
     return false;
   }
 
   std::string state_str;
   if (!base::ReadFileToString(file_name, &state_str)) {
-    LOG(FATAL) << "Cannot read state file: " << file_name.value();
+    CHROMIUM_LOG(FATAL) << "Cannot read state file: " << file_name.value();
     return false;
   }
 
@@ -177,7 +177,7 @@ bool BrowserProfilerImplState::LoadFromFile(const base::FilePath& file_name) {
 
   size_t experiment_command_lines_size;
   STREAM_READ(input, experiment_command_lines_size);
-  LOG(INFO) << "Experiment command lines size: " << experiment_command_lines_size;
+  CHROMIUM_LOG(INFO) << "Experiment command lines size: " << experiment_command_lines_size;
   experiment_command_lines.resize(experiment_command_lines_size);
 
   // Skip all new lines, otherwise getline will have unexpected behavior
@@ -186,9 +186,9 @@ bool BrowserProfilerImplState::LoadFromFile(const base::FilePath& file_name) {
   for (size_t i = 0; i < experiment_command_lines_size; ++i) {
     std::string cmdline;
     if (!std::getline(input, cmdline)) {
-      LOG(FATAL) << "Cannot read experiment command line";
+      CHROMIUM_LOG(FATAL) << "Cannot read experiment command line";
     }
-    LOG(INFO) << "Read command line: " << cmdline;
+    CHROMIUM_LOG(INFO) << "Read command line: " << cmdline;
     experiment_command_lines[i] = cmdline;
   }
 
