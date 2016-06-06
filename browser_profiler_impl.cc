@@ -87,25 +87,7 @@ bool CheckedWriteStringToFile(const base::FilePath& file_path, const std::string
 bool ExecuteCommand(const base::CommandLine& cmd) {
   VLOG(1) << "Execute command: " << cmd.GetCommandLineString();
 
-  base::ProcessHandle handle;
-  if (!base::LaunchProcess(cmd, base::LaunchOptions(), &handle)) {
-    LOG(FATAL) << "Cannot run command " << cmd.GetCommandLineString();
-    return false;
-  }
-
-  int exit_code = 0;
-  if (!base::WaitForExitCode(handle, &exit_code)) {
-    LOG(ERROR) << "Fail to get exit code for command " << cmd.GetCommandLineString();
-    return false;
-  }
-
-  if (exit_code != 0) {
-    LOG(ERROR) << "Running " << cmd.GetCommandLineString()
-        << " failed with code " << exit_code;
-    return false;
-  }
-  /* For newer version of Chromium (e.g., version 51)
-  base::Process process = base::LaunchProcess(cmd, base::LaunchOptions(), &process);
+  base::Process process = base::LaunchProcess(cmd, base::LaunchOptions());
   if (!process.IsValid()) {
     LOG(ERROR) << "Cannot run command " << cmd.GetCommandLineString();
     return false;
@@ -121,14 +103,15 @@ bool ExecuteCommand(const base::CommandLine& cmd) {
     LOG(ERROR) << "Running " << cmd.GetCommandLineString()
         << " failed with code " << exit_code;
     return false;
-  }*/
+  }
 
   return true;
 }
 
 bool ExecuteCommand(const std::string& cmd_str) {
-  std::vector<std::string> cmd_argv;
-  base::SplitString(cmd_str, ' ', &cmd_argv);
+  std::vector<std::string> cmd_argv =
+      base::SplitString(cmd_str, " ", base::WhitespaceHandling::TRIM_WHITESPACE,
+                        base::SplitResult::SPLIT_WANT_NONEMPTY);
 
   return ExecuteCommand(base::CommandLine(cmd_argv));
 }
@@ -139,7 +122,7 @@ bool ExecuteCommandAsRoot(const std::string& cmd) {
 }
 
 bool ExecuteCommandAsRoot(const base::CommandLine& cmd) {
-  CommandLine su_cmd(cmd);
+  base::CommandLine su_cmd(cmd);
   su_cmd.PrependWrapper("su -c");
   return ExecuteCommand(su_cmd);
 }
@@ -462,9 +445,11 @@ void BrowserProfilerImpl::StopTracers() {
   }
 }
 
+#if defined(CHROMIUM_BUILD)
 void BrowserProfilerImpl::OnChromeTracingStopped() {
   StopTracersSecondHalf();
 }
+#endif
 
 void BrowserProfilerImpl::StopTracersSecondHalf() {
   if (setting_->measure_power) {
@@ -632,7 +617,7 @@ std::string BrowserProfilerImpl::GenerateExperimentId(
 
   std::string hardware_model_name;
 #if defined(OS_ANDROID)
-  hardware_model_name = base::SysInfo::GetDeviceName(); 
+  hardware_model_name = base::SysInfo::HardwareModelName(); 
 #endif
 
   return setting_->browser_config_name + "." + HostInUrl(current_experiment_url) +

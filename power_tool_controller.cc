@@ -55,15 +55,17 @@ bool ReadServerIpAndPort(const base::FilePath& server_config_filepath,
     return false;
   }
 
-  std::vector<std::string> lines;
-  base::SplitString(server_config, '\n', &lines);
+  std::vector<std::string> lines =
+      base::SplitString(server_config, "\n", base::WhitespaceHandling::TRIM_WHITESPACE,
+                        base::SplitResult::SPLIT_WANT_NONEMPTY);
   for (size_t i = 0; i < lines.size(); ++i) {
     std::string line = lines[i];
     base::TrimWhitespaceASCII(line, base::TRIM_ALL, &line);
-    if (line.empty() || StartsWithASCII(line, "#", true))
+    if (line.empty() || StartsWith(line, "#", base::CompareCase::SENSITIVE))
       continue;
-    std::vector<std::string> components;
-    base::SplitString(line, ':', &components);
+    std::vector<std::string> components =
+        base::SplitString(line, ":", base::WhitespaceHandling::TRIM_WHITESPACE,
+                          base::SplitResult::SPLIT_WANT_NONEMPTY);
     if (components.size() != 2) {
       LOG(ERROR) << "Error parsing line: " << line;
       continue;
@@ -158,8 +160,9 @@ bool PowerToolController::SyncSendAndCheckResponse(const std::string& message) {
   std::string::size_type blank_line = response.find(kBlankLine);
   response = response.substr(0, blank_line);
 
-  std::vector<std::string> key_values;
-  base::SplitString(response, ':', &key_values); // strings are trimmed, too
+  std::vector<std::string> key_values =
+      base::SplitString(response, ":", base::WhitespaceHandling::TRIM_WHITESPACE,
+                        base::SplitResult::SPLIT_WANT_NONEMPTY);
 
   if (!(key_values.size() == 2 && key_values[0].compare(kStatusKey) == 0 &&
         key_values[1].compare(kOkValue) == 0)) {

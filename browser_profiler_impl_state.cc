@@ -31,7 +31,7 @@ bool ReadExperimentCommandLines(
   std::string cmdline;
   while (getline(all_cmdlines, cmdline)) {
     // Only get the command line with prefix "chrome"
-    if (StartsWithASCII(cmdline, "chrome ", /*case-sensitive*/ true)) {
+    if (StartsWith(cmdline, "chrome", base::CompareCase::SENSITIVE)) {
       experiment_command_lines->push_back(cmdline);
     }
   }
@@ -47,18 +47,19 @@ bool ReadExperimentUrlList(const base::FilePath& url_list_file,
     return false;
   }
 
-  std::vector<std::string> list;
-  base::SplitString(lines, '\n', &list);
+  std::vector<std::string> list =
+    base::SplitString(lines, "\n", base::WhitespaceHandling::TRIM_WHITESPACE,
+                      base::SplitResult::SPLIT_WANT_NONEMPTY);
 
   url_list->clear();
   for (size_t i = 0; i < list.size(); ++i) {
     std::string url = list[i];
     // Skip url starting with #
-    if (!url.empty() && !StartsWithASCII(url, "#", true)) {
+    if (!url.empty() && !StartsWith(url, "#", base::CompareCase::SENSITIVE)) {
       VLOG(1) << "Read url: " << url;
 
       // Add http by default, if the url is just a host name
-      if (!StartsWithASCII(url, "http", true))
+      if (!StartsWith(url, "http", base::CompareCase::SENSITIVE))
         url = "http://" + url;
 
       url_list->push_back(url);
