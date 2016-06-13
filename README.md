@@ -8,3 +8,8 @@ Browser Profiler is designed as a portable library for convenient integration to
 
 ## Dependency
 [Android cpu tools](https://github.com/ducalpha/android_cpu_tools) for determining number of CPU cores and running a synchronization workload.
+
+## Application
+This tool is used in paper ["Rethinking Energy-Performance Trade-Off in Mobile Web Page Loading"](http://cps.kaist.ac.kr/papers/com073-buiA.pdf), by Duc Hoang Bui, Yunxin Liu, Hyosu Kim, Insik Shin and Feng Zhao, in Proceedings of the 21st ACM Intl. Conference on Mobile Computing and Networking (MobiCom '15), Paris, France, September 2015.
+
+More information (talk, introduction and demo videos) is available at the paper's [web page](http://cps.kaist.ac.kr/?page=research/eBrowser/contents.html).
