@@ -25,7 +25,7 @@ index 0000000..f6dbf9a
 +++ b/base/android/browser_profiler_manager.cc
 @@ -0,0 +1,142 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#include "base/android/browser_profiler_manager.h"
 +
@@ -173,7 +173,7 @@ index 0000000..b4d0018
 +++ b/base/android/browser_profiler_manager.h
 @@ -0,0 +1,77 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#ifndef BASE_ANDROID_BROWSER_PROFILER_MANAGER_H_
 +#define BASE_ANDROID_BROWSER_PROFILER_MANAGER_H_
@@ -256,7 +256,7 @@ index 0000000..e64388e
 +++ b/base/android/java/src/org/chromium/base/BrowserProfilerManager.java
 @@ -0,0 +1,47 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +package org.chromium.base;
 +
 +import android.content.Context;
@@ -468,7 +468,7 @@ index 0000000..0a5fc85
 +++ b/content/browser/tracing/tracing_controller_browser_profiler_impl.cc
 @@ -0,0 +1,65 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#include "content/browser/tracing/tracing_controller_browser_profiler_impl.h"
 +
@@ -539,7 +539,7 @@ index 0000000..139b0e0
 +++ b/content/browser/tracing/tracing_controller_browser_profiler_impl.h
 @@ -0,0 +1,45 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#ifndef CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_BROWSER_PROFILER_IMPL_H_
 +#define CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_BROWSER_PROFILER_IMPL_H_
@@ -629,7 +629,7 @@ index 0000000..248f786
 +++ b/content/common/experiment_result.cc
 @@ -0,0 +1,14 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($DUC_LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#include "content/common/experiment_result.h"
 +
@@ -649,7 +649,7 @@ index 0000000..d74816a
 +++ b/content/common/experiment_result.h
 @@ -0,0 +1,22 @@
 +// Copyright 2016 Duc Hoang Bui, KAIST. All rights reserved.
-+// Licensed under MIT ($DUC_LICENSE_URL)
++// Licensed under MIT (https://github.com/ducalpha/browser_profiler/blob/master/LICENSE)
 +
 +#ifndef CONTENT_PUBLIC_COMMON_EXPERIMENT_RESULT_H_
 +#define CONTENT_PUBLIC_COMMON_EXPERIMENT_RESULT_H_
