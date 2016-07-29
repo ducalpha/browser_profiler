@@ -37,11 +37,11 @@ class PowerToolConnectionImpl : public PowerToolConnection {
 
   ~PowerToolConnectionImpl();
 
-  virtual bool Connect() OVERRIDE;
+  virtual bool Connect() override;
 
-  virtual bool SyncReceiveMessage(std::string* message) OVERRIDE;
+  virtual bool SyncReceiveMessage(std::string* message) override;
 
-  virtual bool SyncSendMessage(const std::string& message) OVERRIDE;
+  virtual bool SyncSendMessage(const std::string& message) override;
  
  private:
   int socket_to_server_;

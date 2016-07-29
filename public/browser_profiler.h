@@ -21,6 +21,7 @@ namespace browser_profiler {
 
 
 class BrowserProfilerClient;
+class InternalTracingController;
 
 // Services provided by a profiler
 // The implementer must call Prepare(), PostProcess() and ClearCacheIfNeeded() in
@@ -62,7 +63,12 @@ class BrowserProfiler {
   virtual ~BrowserProfiler() {}
 #endif
 
+  // Callback for StopInternalTracing
+  // TODO: protected and pass this to InternalTracingController
+  virtual void OnInternalTracingStopped() {}
+
  protected:
+
 #if defined(COMPILER_GCC) && __cplusplus >= 201103L && \
     (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40900
 	std::unique_ptr<BrowserProfilerClient> client_;
@@ -88,6 +94,11 @@ class BrowserProfilerClient {
 
   // Close the currently active shell
   virtual void CloseActiveShell() = 0;
+
+  // Get an instance of Internal Tracing Controller
+  virtual std::shared_ptr<InternalTracingController> GetInternalTracingControllerInstance() {
+    return nullptr;
+  }
 
   // For scoped_ptr
 #if !(defined(COMPILER_GCC) && __cplusplus >= 201103L && \

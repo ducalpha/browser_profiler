@@ -28,6 +28,7 @@
         'power_tool_controller.h',
         'public/browser_profiler.cc',
         'public/browser_profiler.h',
+        'public/internal_tracing_controller.h',
         'public/power_tool_connection.cc',
         'public/power_tool_connection.h',
       ],

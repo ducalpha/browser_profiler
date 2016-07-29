@@ -18,7 +18,7 @@ extern const char kClearDnsCache[];
 
 extern const char kDisableBrowserProfiler[];
 
-extern const char kDoChromeTrace[];
+extern const char kDoItrace[];
 
 extern const char kDoFtrace[];
 

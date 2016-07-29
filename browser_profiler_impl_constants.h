@@ -43,7 +43,7 @@ struct BrowserProfilerImplConstants {
 
   std::string kExperimentResultBaseName;
   std::string kFtraceBaseName;
-  std::string kChromeTraceBaseName;
+  std::string kItraceBaseName;
   std::string kPcapBaseName;
 
   std::string kBlankPageUrl;

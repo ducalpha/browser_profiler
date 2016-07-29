@@ -92,7 +92,7 @@ void ExperimentResult::WriteToFile(const base::FilePath& filepath, bool include_
   }
 
   std::string result_line = LogLine() + "\n";
-  if (AppendToFile(filepath, result_line.c_str(), result_line.length()) == -1) {
+  if (!AppendToFile(filepath, result_line.c_str(), result_line.length())) {
       LOG(FATAL) << "Cannot write experiment result at " << filepath.value();
   }
 }

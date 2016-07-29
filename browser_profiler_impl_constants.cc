@@ -24,7 +24,7 @@ BrowserProfilerImplConstants::BrowserProfilerImplConstants(const base::FilePath&
     kClearDnsCacheCommand("ndc resolver flushdefaultif"),
     kExperimentResultBaseName("experiment_result.log"),
     kFtraceBaseName("ftrace.dat"),
-    kChromeTraceBaseName("chrome_trace.json"),
+    kItraceBaseName("itrace.json"),
     kPcapBaseName("pcap"),
     kBlankPageUrl("about:blank") {
     kBpStateFile = kBpTmpDir.Append(std::string("browser-profiler-state"));

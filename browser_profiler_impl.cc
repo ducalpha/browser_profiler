@@ -217,7 +217,7 @@ struct BrowserProfilerImpl::Setting {
 
   bool capture_packets;
   bool do_ftrace;
-  bool do_chrome_trace;
+  bool do_itrace;
   std::string tracing_categories;
   bool measure_power;
   unsigned num_try_per_url;
@@ -244,9 +244,7 @@ BrowserProfilerImpl::BrowserProfilerImpl(BrowserProfilerClient* client)
     default_cpu_setup_command_(constants_.kCpuConfigurerExecutable),
     sync_workload_cpu_setup_command_(constants_.kCpuConfigurerExecutable),
     prepared_(false) {
-#if defined(CHROMIUM_BUILD)
   chrome_tracing_started_ = false;
-#endif
 }
 
 void BrowserProfilerImpl::Initialize(const base::FilePath& browser_command_line_file,
@@ -420,36 +418,33 @@ void BrowserProfilerImpl::StartTracers() {
   if (setting_->do_ftrace)
     StartFtrace();
 
-  if (setting_->do_chrome_trace)
-    StartChromeTracing();
+  if (setting_->do_itrace)
+    StartInternalTracing();
 
   if (setting_->capture_packets)
     StartCapturePackets(experiment_id_);
 }
 
 void BrowserProfilerImpl::StopTracers() {
-#if defined(CHROMIUM_BUILD)
-  if (setting_->do_chrome_trace && chrome_tracing_started_) {
+  if (setting_->do_itrace && chrome_tracing_started_
+      && internal_tracing_controller_ != nullptr) {
     VLOG(0) << "Stop ChromeTracing";
 
     base::FilePath output_file(
-        constants_.kBpOutDir.Append(experiment_id_).value() + "." + constants_.kChromeTraceBaseName);
+        constants_.kBpOutDir.Append(experiment_id_).value() + "." + constants_.kItraceBaseName);
 
     // We call internal tracing and ChromeTracing interchangebly
     // if ETracingAsync is OK, onTracingStopped will be called after done
-    chrome_tracing_controller_.StopTracing(output_file);
-  } else
-#endif
-  {
+    if (!internal_tracing_controller_->StopTracing(output_file))
+      StopTracersSecondHalf(); // fallback to normal flow if internal tracing not supported
+  } else {
     StopTracersSecondHalf();
   }
 }
 
-#if defined(CHROMIUM_BUILD)
-void BrowserProfilerImpl::OnChromeTracingStopped() {
+void BrowserProfilerImpl::OnInternalTracingStopped() {
   StopTracersSecondHalf();
 }
-#endif
 
 void BrowserProfilerImpl::StopTracersSecondHalf() {
   if (setting_->measure_power) {
@@ -716,16 +711,20 @@ std::string BrowserProfilerImpl::BrowserCommandLine() {
   return current_command_line_;
 }
 
-void BrowserProfilerImpl::StartChromeTracing() {
-#if defined(CHROMIUM_BUILD)
-  VLOG(0) << "Start Chrome Tracing";
-  if (!chrome_tracing_controller_.StartTracing(this, setting_->tracing_categories,
+void BrowserProfilerImpl::StartInternalTracing() {
+  VLOG(0) << "Start internal tracing";
+
+  internal_tracing_controller_ = client_->GetInternalTracingControllerInstance();
+  if (internal_tracing_controller_  == nullptr)
+    LOG(FATAL) << "Fail to initialize internal tracing controller";
+
+  if (internal_tracing_controller_ == nullptr
+      || !internal_tracing_controller_->StartTracing(this, setting_->tracing_categories,
         "record-as-much-as-possible")) {
     LOG(ERROR) << "Failed to start ChromeTracing";
   } else {
     chrome_tracing_started_ = true;
   }
-#endif
 }
 
 void BrowserProfilerImpl::InitializeCpuSetupCommands() {
@@ -811,7 +810,7 @@ void BrowserProfilerImpl::ClearDnsCache() {
 BrowserProfilerImpl::Setting::Setting()
   : capture_packets(false),
     do_ftrace(false),
-    do_chrome_trace(false),
+    do_itrace(false),
     tracing_categories("*"),
     measure_power(false),
     num_try_per_url(5),
@@ -833,9 +832,9 @@ BrowserProfilerImpl::Setting::Setting()
     }
   }
 
-  do_chrome_trace = command_line.HasSwitch(switches::kDoChromeTrace);
-  if (do_chrome_trace)
-    tracing_categories = command_line.GetSwitchValueASCII(switches::kDoChromeTrace);
+  do_itrace = command_line.HasSwitch(switches::kDoItrace);
+  if (do_itrace)
+    tracing_categories = command_line.GetSwitchValueASCII(switches::kDoItrace);
 
   std::string utt_str = command_line.GetSwitchValueASCII(switches::kUserThinkTimeMillis);
   if (!utt_str.empty()) {

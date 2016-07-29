@@ -5,6 +5,7 @@
 #define BROWSER_PROFILER_BROWSER_PROFILER_IMPL_H_
 
 #include "public/browser_profiler.h"
+#include "public/internal_tracing_controller.h"
 
 #include "browser_profiler_impl_constants.h"
 #include "browser_profiler_impl_state.h"
@@ -14,11 +15,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 
-// Chromium-specific
-#if defined(CHROMIUM_BUILD)
-#include "content/browser/tracing/tracing_controller_browser_profiler_impl.h"
-#endif
-
 #if defined(COMPILER_GCC) && __cplusplus >= 201103L && \
     (__GNUC__ * 10000 + __GNUC_MINOR__ * 100) >= 40900
 #include <memory>
@@ -27,14 +23,6 @@
 #endif
 
 #include "base/compiler_specific.h"
-
-#if defined(CHROMIUM_BUILD)
-namespace content {
-
-class TracingControllerBrowserProfilerImpl;
-
-}  // namespace content
-#endif
 
 namespace browser_profiler {
 
@@ -61,16 +49,18 @@ class BrowserProfilerImpl : public BrowserProfiler {
 
   // Need to know cpu_info_command_line_file to initialize it if needed
   virtual void Initialize(const base::FilePath& browser_command_line_file,
-      const base::FilePath& cpu_info_command_line_file) OVERRIDE;
+      const base::FilePath& cpu_info_command_line_file) override;
 
-  virtual bool Prepare(std::string *experiment_url) OVERRIDE;
+  virtual bool Prepare(std::string *experiment_url) override;
 
   virtual bool PostProcess(const std::string& url,
-      double navigation_start_monotonic_time, double load_event_end_monotonic_time) OVERRIDE;
+      double navigation_start_monotonic_time, double load_event_end_monotonic_time) override;
 
-  virtual void ClearCacheIfNeeded(const base::FilePath& cache_path) OVERRIDE;
+  virtual void ClearCacheIfNeeded(const base::FilePath& cache_path) override;
 
-  virtual void DelayedTaskCallback() OVERRIDE;
+  virtual void DelayedTaskCallback() override;
+
+  virtual void OnInternalTracingStopped() override;
 
  private:
   void PostProcessInternal();
@@ -97,7 +87,7 @@ class BrowserProfilerImpl : public BrowserProfiler {
   void BackupCurrentCommandLine();
   void RestoreBackupCommandLine();
   std::string BrowserCommandLine();
-  void StartChromeTracing();
+  void StartInternalTracing();
   void InitializeCpuSetupCommands();
 
   void StartFtrace();
@@ -134,15 +124,9 @@ class BrowserProfilerImpl : public BrowserProfiler {
 
   std::string experiment_id_;
 
-#if defined(CHROMIUM_BUILD)
-  friend class content::TracingControllerBrowserProfilerImpl;
-
-  void OnChromeTracingStopped();
-
-  content::TracingControllerBrowserProfilerImpl chrome_tracing_controller_;
+  std::shared_ptr<InternalTracingController> internal_tracing_controller_;
   
   bool chrome_tracing_started_;
-#endif
 
   // whether or not the Prepare() is executed
   // E.g., at start up , PostProcess() will be called but not Prepare()

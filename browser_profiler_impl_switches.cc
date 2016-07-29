@@ -24,8 +24,8 @@ const char kClearDnsCache[] = "clear-dns";
 // Disable Browser Profiler
 const char kDisableBrowserProfiler[] = "disable-browser-profiler";
 
-// Do Chrome internal tracing
-const char kDoChromeTrace[] = "do-chrome-trace";
+// Do internal tracing (e.g., about:tracing of Chrome)
+const char kDoItrace[] = "do-itrace";
 
 // Record Ftrace
 const char kDoFtrace[] = "do-ftrace";
