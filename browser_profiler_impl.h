@@ -56,8 +56,6 @@ class BrowserProfilerImpl : public BrowserProfiler {
   virtual bool PostProcess(const std::string& url,
       double navigation_start_monotonic_time, double load_event_end_monotonic_time) override;
 
-  virtual void ClearCacheIfNeeded(const base::FilePath& cache_path) override;
-
   virtual void DelayedTaskCallback() override;
 
   virtual void OnInternalTracingStopped() override;

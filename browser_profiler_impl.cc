@@ -37,7 +37,10 @@ namespace {
 const int kNanosecondsPerSecond = 1000000000;
 
 // TODO: read home dir from file or command line
-const char kBrowserProfilerHomeDir[] = "/sdcard/ducalpha/bp/";
+//const char kBrowserProfilerHomeDir[] = "/sdcard/ducalpha/bp/";
+const char kBrowserProfilerHomeDir[] = "/data/local/tmp/my_home/android_env/bp/";
+
+const char kBrowserProfilerWritableDir[] = "/sdcard/bp/";
 
 // Prefix file so that files are sorted by experiment time
 // Unfortunately, FilePath does not have a convenient way to prefix a filename
@@ -193,7 +196,7 @@ std::string HostInUrl(std::string url) {
 
 base::FilePath GenerateBackupFileName(const base::FilePath& original_file) {
   //return original_file.InsertBeforeExtension("bak");
-  return base::FilePath(original_file.value() + "-bak");
+  return base::FilePath(std::string(kBrowserProfilerWritableDir) + original_file.BaseName().value() + "-bak");
 }
 
 // Don't want to have dependency on Chromium's base string_number_conversions
@@ -240,7 +243,7 @@ struct BrowserProfilerImpl::Setting {
 
 BrowserProfilerImpl::BrowserProfilerImpl(BrowserProfilerClient* client)
   : BrowserProfiler(client),
-    constants_(base::FilePath(kBrowserProfilerHomeDir)),
+    constants_(base::FilePath(kBrowserProfilerHomeDir), base::FilePath(kBrowserProfilerWritableDir)),
     default_cpu_setup_command_(constants_.kCpuConfigurerExecutable),
     sync_workload_cpu_setup_command_(constants_.kCpuConfigurerExecutable),
     prepared_(false) {
@@ -298,7 +301,8 @@ bool BrowserProfilerImpl::Prepare(std::string *experiment_url) {
     BackupCurrentCommandLine();
     ReplaceCurrentWithNextExperimentCommandLine();
 
-    state_.SaveToFile(constants_.kBpStateFile);
+    if (!state_.SaveToFile(constants_.kBpStateFile))
+      LOG(FATAL) << "Cannot save browser profiler state to file at " << constants_.kBpStateFile.value();
     RestartBrowser();
     return false;
   }
@@ -326,21 +330,6 @@ bool BrowserProfilerImpl::Prepare(std::string *experiment_url) {
   VLOG(1) << "Generated experiment id: " << experiment_id_;
 
   return true;
-}
-
-void BrowserProfilerImpl::ClearCacheIfNeeded(const base::FilePath& cache_path) {
-  if (!setting_->need_clear_cache)
-    return;
-
-  if (!base::DeleteFile(cache_path, /* recursive */ true)) {
-    LOG(ERROR) << "Unable to delete cache folder";
-    return;
-  }
-
-  // Sync to disk to prevent noise to the experiment
-  sync();
-
-  VLOG(1) << "Deleted cache directory at " << cache_path.value();
 }
 
 bool BrowserProfilerImpl::PostProcess(const std::string& url, double navigation_start_monotonic_time,
@@ -394,7 +383,8 @@ void BrowserProfilerImpl::PostProcessInternalSecondHalf() {
 
   state_.last_experiment_id = experiment_id_;
   LOG(INFO) << "Last experiment id: " << state_.last_experiment_id;
-  state_.SaveToFile(constants_.kBpStateFile);
+  if (!state_.SaveToFile(constants_.kBpStateFile))
+    LOG(FATAL) << "Cannot save browser profiler state to file";
 
   RestartBrowser();
 }
@@ -451,7 +441,8 @@ void BrowserProfilerImpl::StopTracersSecondHalf() {
     client_->CloseActiveShell(); // reduce power noise
 
     // wait 500ms for other threads to finish
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(500));
+    // hotfix: sleep on Java layer instead of here?
+    // base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(500));
 
     StopPowerSampling();
 
@@ -589,7 +580,8 @@ void BrowserProfilerImpl::PostProcessAfterAllExperiments() {
   // Reset no_further_experiment to restart experiment process
   // and do new experiments
   state_.start_new_experiments = true;
-  state_.SaveToFile(constants_.kBpStateFile);
+  if (!state_.SaveToFile(constants_.kBpStateFile))
+    LOG(FATAL) << "Cannot save browser profiler state to file";
 
   // Restore the original command line file if needed
   if (!state_.experiment_command_lines.empty()) {

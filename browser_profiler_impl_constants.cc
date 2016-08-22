@@ -18,9 +18,9 @@ const char kBinDirName[] = "bin/";
 
 namespace browser_profiler {
 
-BrowserProfilerImplConstants::BrowserProfilerImplConstants(const base::FilePath& home_dir)
+BrowserProfilerImplConstants::BrowserProfilerImplConstants(const base::FilePath& home_dir, const base::FilePath& writable_dir)
   : kBpHome(home_dir), 
-    kBpTmpDir(kBpHome.Append(kTmpDirName)),
+    kBpTmpDir(writable_dir.Append(kTmpDirName)),
     kClearDnsCacheCommand("ndc resolver flushdefaultif"),
     kExperimentResultBaseName("experiment_result.log"),
     kFtraceBaseName("ftrace.dat"),
@@ -31,7 +31,7 @@ BrowserProfilerImplConstants::BrowserProfilerImplConstants(const base::FilePath&
     kPowerToolServerConfigFile = kBpTmpDir.Append("power-tool-server-config");
     kExperimentCommandLineFile = kBpTmpDir.Append("experiment-command-lines");
     kBpUrlListFile = kBpTmpDir.Append("bp-url-list");
-    kBpOutDir = kBpHome.Append(kOutDirName);
+    kBpOutDir = writable_dir.Append(kOutDirName);
     kExperimentResultFile = kBpOutDir.Append(kExperimentResultBaseName);
     kBinDir = kBpHome.Append(kBinDirName);
     kStartFtraceScript = kBinDir.Append("start-ftrace.sh");

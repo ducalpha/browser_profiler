@@ -141,7 +141,9 @@ bool BrowserProfilerImplState::SaveToFile(const base::FilePath& file_name) {
   STREAM_WRITELN(output, last_experiment_id);
 
   std::string output_str = output.str();
-  return WriteFile(file_name, output_str.c_str(), output_str.length());
+  // permission denied on /data/local/tmp on Android 6
+  // not work because of new lines: std::string cmd = "su -c printf '" + output_str + "' > " + file_name.value();
+  return WriteFile(file_name, output_str.c_str(), output_str.length()) == output_str.length();
 }
 
 // No exception allowed in Chromium so we need to check each read

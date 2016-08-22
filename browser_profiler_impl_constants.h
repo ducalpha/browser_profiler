@@ -11,7 +11,7 @@
 namespace browser_profiler {
 
 struct BrowserProfilerImplConstants {
-  BrowserProfilerImplConstants(const base::FilePath& home_dir);
+  BrowserProfilerImplConstants(const base::FilePath& home_dir, const base::FilePath& writable_dir);
 
   base::FilePath kBpHome;
 
