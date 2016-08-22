@@ -48,11 +48,6 @@ class BrowserProfiler {
   virtual bool PostProcess(const std::string& url,
       double navigation_start_monotonic_time, double load_event_end_monotonic_time) = 0;
 
-  // Delete all the cache, given a cache path and enabled argument switch
-  // Must be called before the cache is initialized
-  // It is the responsibility
-  virtual void ClearCacheIfNeeded(const base::FilePath& cache_path) = 0;
-
   // Passing a method pointer is not trivial in C++98
   // TODO: change to std::function in C++11 for more flexibility
   virtual void DelayedTaskCallback() = 0;
@@ -66,6 +61,12 @@ class BrowserProfiler {
   // Callback for StopInternalTracing
   // TODO: protected and pass this to InternalTracingController
   virtual void OnInternalTracingStopped() {}
+
+  // Delete all the cache, given a cache path and enabled argument switch
+  // Must be called before the cache is initialized
+  // It is the responsibility of the ProfilerClient to call this before cache is created
+  // This will work even when BrowserProfiler is disabled
+  static void ClearCacheIfNeeded(const base::FilePath& cache_path);
 
  protected:
 
