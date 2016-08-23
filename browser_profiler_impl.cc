@@ -625,16 +625,23 @@ void BrowserProfilerImpl::StopPowerSampling() {
   // Run a 0.9 sec workload Exynos 5422
   android_cpu_tools::WorkloadGenerator::RunWorkload(
       std::vector<size_t>(1, android_cpu_tools::CommandLineCpuInfo::MaxCoreId()),
-      10000);
+      15000);
 
   std::ostringstream sync_workload_end_time;
   sync_workload_end_time << std::fixed << std::setprecision(6)
       << MonotonicNow();
 
-  experiment_result_.Put(
-      ExperimentResult::kSyncWorkloadEndTimeKey, sync_workload_end_time.str());
+  // wait for cpu usage to drop
+  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1000));
 
   ExecuteCommandAsRoot(default_cpu_setup_command_);
+
+  // wait for cpu usage to drop
+  // base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1000));
+
+  // stop sampling first, avoid the rising of cpu power in the end of power trace
+  experiment_result_.Put(
+      ExperimentResult::kSyncWorkloadEndTimeKey, sync_workload_end_time.str());
 
   if (!power_tool_controller_->StopSampling(
         experiment_result_.LogHeaderLine(), experiment_result_.LogLine())) {
