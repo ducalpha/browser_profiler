@@ -16,7 +16,8 @@ bool ReadExperimentCommandLines(
       const base::FilePath& experiment_command_lines_file,
       std::vector<std::string> *experiment_command_lines) {
   if (!base::PathExists(experiment_command_lines_file)) {
-    LOG(ERROR) << "Experiment command line file not exist at: " << experiment_command_lines_file.value();
+    LOG(ERROR) << "Experiment command line file not exist at: " << experiment_command_lines_file.value()
+    << "If the location is on /sdcard, consider to grant the permission to Chrome (http://www.evernote.com/l/ACIc8uKqBxROHK1-VuZ_GwLfU5IDR9rb-3M/)";
     return false;
   }
 
@@ -98,7 +99,7 @@ void BrowserProfilerImplState::Initialize(const base::FilePath& experiment_comma
 
   if (!ReadExperimentCommandLines(experiment_command_lines_file,
           &experiment_command_lines)) {
-    LOG(ERROR) << "Fail to read experiment command lines";
+    LOG(ERROR) << "Fail to read experiment command lines at " << experiment_command_lines_file.value();
   }
 
   if (!ReadExperimentUrlList(url_list_file, &experiment_urls)) {
